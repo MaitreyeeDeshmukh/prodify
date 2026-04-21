@@ -16,7 +16,7 @@ describe('runPrompts', () => {
   });
 
   it('returns per-seat + teams + nextjs when user confirms detected stack', async () => {
-    (inquirerMock.prompt as jest.Mock).mockResolvedValueOnce({
+    (inquirerMock.prompt as unknown as jest.Mock).mockResolvedValueOnce({
       pricingModel: 'per-seat',
       userType: 'teams',
       confirmStack: true,
@@ -30,7 +30,7 @@ describe('runPrompts', () => {
   });
 
   it('returns flat + individuals + nextjs', async () => {
-    (inquirerMock.prompt as jest.Mock).mockResolvedValueOnce({
+    (inquirerMock.prompt as unknown as jest.Mock).mockResolvedValueOnce({
       pricingModel: 'flat',
       userType: 'individuals',
       confirmStack: true,
@@ -44,7 +44,7 @@ describe('runPrompts', () => {
   });
 
   it('prompts for manual stack selection when stack is unknown', async () => {
-    (inquirerMock.prompt as jest.Mock).mockResolvedValueOnce({
+    (inquirerMock.prompt as unknown as jest.Mock).mockResolvedValueOnce({
       pricingModel: 'usage',
       userType: 'enterprise',
       manualStack: 'express',

@@ -9,38 +9,50 @@ export async function detectStack(cwd: string): Promise<DetectedStack> {
   // ── 1. Check package.json (covers Next.js, Express, Rails) ──────────────────
   const pkgPath = path.join(cwd, 'package.json');
   if (await fs.pathExists(pkgPath)) {
-    const pkg = await fs.readJson(pkgPath) as Record<string, unknown>;
-    const deps: Record<string, string> = {
-      ...(pkg['dependencies'] as Record<string, string> ?? {}),
-      ...(pkg['devDependencies'] as Record<string, string> ?? {}),
-    };
+    try {
+      const pkg = await fs.readJson(pkgPath) as Record<string, unknown>;
+      const deps: Record<string, string> = {
+        ...(pkg['dependencies'] as Record<string, string> ?? {}),
+        ...(pkg['devDependencies'] as Record<string, string> ?? {}),
+      };
 
-    if (deps['next']) {
-      return { type: 'nextjs', version: deps['next'], confidence: 'high' };
-    }
-    if (deps['express']) {
-      return { type: 'express', version: deps['express'], confidence: 'high' };
-    }
-    if (deps['rails'] || deps['actionpack']) {
-      return { type: 'rails', confidence: 'high' };
+      if (deps['next']) {
+        return { type: 'nextjs', version: deps['next'], confidence: 'high' };
+      }
+      if (deps['express']) {
+        return { type: 'express', version: deps['express'], confidence: 'high' };
+      }
+      if (deps['rails'] || deps['actionpack']) {
+        return { type: 'rails', confidence: 'high' };
+      }
+    } catch {
+      // malformed package.json — fall through to next detection method
     }
   }
 
   // ── 2. Check requirements.txt (Python/FastAPI) ───────────────────────────────
   const requirementsPath = path.join(cwd, 'requirements.txt');
   if (await fs.pathExists(requirementsPath)) {
-    const content = (await fs.readFile(requirementsPath, 'utf-8')) as string;
-    if (content.toLowerCase().includes('fastapi')) {
-      return { type: 'fastapi', confidence: 'high' };
+    try {
+      const content = (await fs.readFile(requirementsPath, 'utf-8')) as string;
+      if (content.toLowerCase().includes('fastapi')) {
+        return { type: 'fastapi', confidence: 'high' };
+      }
+    } catch {
+      // unreadable file — fall through
     }
   }
 
   // ── 3. Check pyproject.toml (Python/FastAPI fallback) ────────────────────────
   const pyprojectPath = path.join(cwd, 'pyproject.toml');
   if (await fs.pathExists(pyprojectPath)) {
-    const content = (await fs.readFile(pyprojectPath, 'utf-8')) as string;
-    if (content.toLowerCase().includes('fastapi')) {
-      return { type: 'fastapi', confidence: 'medium' };
+    try {
+      const content = (await fs.readFile(pyprojectPath, 'utf-8')) as string;
+      if (content.toLowerCase().includes('fastapi')) {
+        return { type: 'fastapi', confidence: 'medium' };
+      }
+    } catch {
+      // unreadable file — fall through
     }
   }
 

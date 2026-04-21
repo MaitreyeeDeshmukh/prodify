@@ -7,6 +7,13 @@ export async function runPrompts(detected: DetectedStack): Promise<ProdifyAnswer
   // Build questions array depending on whether a stack was detected
   const stackIsKnown = detected.type !== 'unknown';
 
+  interface RawAnswers {
+    pricingModel: ProdifyAnswers['pricingModel'];
+    userType: ProdifyAnswers['userType'];
+    confirmStack?: boolean;
+    manualStack?: StackType;
+  }
+
   const questions: inquirer.QuestionCollection = [
     {
       type: 'list',
@@ -54,13 +61,34 @@ export async function runPrompts(detected: DetectedStack): Promise<ProdifyAnswer
         ]),
   ];
 
-  const answers = await inquirer.prompt(questions);
+  const answers = await inquirer.prompt(questions) as RawAnswers;
 
-  // Resolve final stack: confirmed detected OR manually chosen
-  const stack: StackType =
-    stackIsKnown && answers['confirmStack'] !== false
-      ? detected.type
-      : (answers['manualStack'] as StackType) ?? detected.type;
+  // ── Resolve final stack ────────────────────────────────────────────────────
+  let stack: StackType;
+
+  if (!stackIsKnown) {
+    // Unknown stack: user always chose from the list
+    stack = answers['manualStack'] as StackType;
+  } else if (answers['confirmStack'] === false) {
+    // User rejected the auto-detected stack — ask them to pick manually
+    const followUp = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'manualStack',
+        message: 'Which stack are you on?',
+        choices: [
+          { name: 'Next.js', value: 'nextjs' },
+          { name: 'Express', value: 'express' },
+          { name: 'FastAPI', value: 'fastapi' },
+          { name: 'Rails', value: 'rails' },
+        ],
+      },
+    ]) as { manualStack: StackType };
+    stack = followUp['manualStack'] as StackType;
+  } else {
+    // User confirmed the detected stack
+    stack = detected.type;
+  }
 
   return {
     pricingModel: answers['pricingModel'] as ProdifyAnswers['pricingModel'],

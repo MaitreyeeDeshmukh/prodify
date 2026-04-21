@@ -127,7 +127,7 @@ export async function POST(req: Request) {
   }
 
   const { priceId, quantity } = await req.json() as { priceId: string; quantity?: number };
-  const origin = req.headers.get('origin') ?? 'http://localhost:3000';
+  const origin = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
 
   // TODO: look up Stripe customerId from DB using session.user.id
   const customerId = 'cus_placeholder';
@@ -153,7 +153,10 @@ import Stripe from 'stripe';
 
 export async function POST(req: Request) {
   const body = await req.text();
-  const sig = req.headers.get('stripe-signature')!;
+  const sig = req.headers.get('stripe-signature');
+  if (!sig) {
+    return NextResponse.json({ error: 'Missing stripe-signature header' }, { status: 400 });
+  }
 
   let event: Stripe.Event;
   try {
@@ -205,7 +208,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const origin = req.headers.get('origin') ?? 'http://localhost:3000';
+  const origin = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
 
   // TODO: look up Stripe customerId from DB using session.user.id
   const customerId = 'cus_placeholder';

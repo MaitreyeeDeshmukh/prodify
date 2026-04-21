@@ -22,7 +22,7 @@ datasource db {
 
 // ── Model blocks ──────────────────────────────────────────────────────────────
 
-const USER_MODEL = `model User {
+const USER_MODEL_BASE = `model User {
   id            String         @id @default(cuid())
   name          String?
   email         String         @unique
@@ -32,6 +32,21 @@ const USER_MODEL = `model User {
   accounts      Account[]
   sessions      Session[]
   subscriptions Subscription[]
+}
+
+`;
+
+const USER_MODEL_WITH_MEMBERSHIPS = `model User {
+  id            String         @id @default(cuid())
+  name          String?
+  email         String         @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime       @default(now())
+  accounts      Account[]
+  sessions      Session[]
+  subscriptions Subscription[]
+  memberships   Membership[]
 }
 
 `;
@@ -70,6 +85,8 @@ const SUBSCRIPTION_MODEL = `model Subscription {
   currentPeriodEnd     DateTime?
   createdAt            DateTime  @default(now())
   user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 `;
@@ -111,6 +128,7 @@ const MEMBERSHIP_MODEL = `model Membership {
   organizationId String
   role           String       @default("member") // "owner" | "admin" | "member"
   createdAt      DateTime     @default(now())
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([userId, organizationId])
@@ -121,13 +139,15 @@ const MEMBERSHIP_MODEL = `model Membership {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export function buildDbFiles(userType: UserType): FileEntry[] {
-  let schema = PREAMBLE + USER_MODEL + ACCOUNT_SESSION_MODELS + SUBSCRIPTION_MODEL + WEBHOOK_EVENT_MODEL;
-
   if (userType === 'teams') {
-    schema += ORGANIZATION_MODEL + MEMBERSHIP_MODEL;
-  } else if (userType === 'enterprise') {
-    schema += ENTERPRISE_ORGANIZATION_MODEL + MEMBERSHIP_MODEL;
+    const schema = PREAMBLE + USER_MODEL_WITH_MEMBERSHIPS + ACCOUNT_SESSION_MODELS + SUBSCRIPTION_MODEL + WEBHOOK_EVENT_MODEL + ORGANIZATION_MODEL + MEMBERSHIP_MODEL;
+    return [{ relativePath: 'prodify-layer/db/schema.prisma', content: schema }];
   }
-
+  if (userType === 'enterprise') {
+    const schema = PREAMBLE + USER_MODEL_WITH_MEMBERSHIPS + ACCOUNT_SESSION_MODELS + SUBSCRIPTION_MODEL + WEBHOOK_EVENT_MODEL + ENTERPRISE_ORGANIZATION_MODEL + MEMBERSHIP_MODEL;
+    return [{ relativePath: 'prodify-layer/db/schema.prisma', content: schema }];
+  }
+  // individuals
+  const schema = PREAMBLE + USER_MODEL_BASE + ACCOUNT_SESSION_MODELS + SUBSCRIPTION_MODEL + WEBHOOK_EVENT_MODEL;
   return [{ relativePath: 'prodify-layer/db/schema.prisma', content: schema }];
 }

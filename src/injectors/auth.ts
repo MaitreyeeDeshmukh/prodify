@@ -18,6 +18,7 @@ import { prisma } from '@/lib/prisma';
 
 export const authOptions = {
   adapter: PrismaAdapter(prisma),
+  secret: process.env.NEXTAUTH_SECRET!,
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -52,6 +53,7 @@ import { prisma } from '@/lib/prisma';
 
 export const authOptions = {
   adapter: PrismaAdapter(prisma),
+  secret: process.env.NEXTAUTH_SECRET!,
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -64,14 +66,20 @@ export const authOptions = {
   ],
   session: { strategy: 'jwt' as const },
   callbacks: {
+    async jwt({ token, user }: { token: any; user: any }) {
+      // On initial sign-in, fetch organizationId and store in token
+      if (user?.id) {
+        const membership = await prisma.membership.findFirst({
+          where: { userId: user.id },
+          select: { organizationId: true },
+        });
+        if (membership) token.organizationId = membership.organizationId;
+      }
+      return token;
+    },
     async session({ session, token }: { session: any; token: any }) {
       if (token?.sub) session.user.id = token.sub;
-      // Attach organizationId from DB membership
-      const membership = await prisma.membership.findFirst({
-        where: { userId: token.sub as string },
-        select: { organizationId: true },
-      });
-      if (membership) session.user.organizationId = membership.organizationId;
+      if (token?.organizationId) session.user.organizationId = token.organizationId;
       return session;
     },
   },
@@ -110,7 +118,10 @@ const SAMLProvider = {
 
 export const authOptions = {
   adapter: PrismaAdapter(prisma),
+  secret: process.env.NEXTAUTH_SECRET!,
   providers: [
+    // NOTE: Remove the OAuth providers below if SAML is your sole IdP.
+    // Enterprise customers often use SSO-only authentication.
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,

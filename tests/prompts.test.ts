@@ -29,18 +29,20 @@ describe('runPrompts', () => {
     expect(result.stack).toBe('nextjs');
   });
 
-  it('returns flat + individuals + nextjs', async () => {
-    (inquirerMock.prompt as unknown as jest.Mock).mockResolvedValueOnce({
-      pricingModel: 'flat',
-      userType: 'individuals',
-      confirmStack: true,
-    });
+  it('prompts for manual selection when user rejects detected stack', async () => {
+    (inquirerMock.prompt as unknown as jest.Mock)
+      .mockResolvedValueOnce({
+        pricingModel: 'flat',
+        userType: 'teams',
+        confirmStack: false,
+      })
+      .mockResolvedValueOnce({ manualStack: 'express' });
 
     const result = await runPrompts(nextjsStack);
 
+    expect(result.stack).toBe('express');
     expect(result.pricingModel).toBe('flat');
-    expect(result.userType).toBe('individuals');
-    expect(result.stack).toBe('nextjs');
+    expect(result.userType).toBe('teams');
   });
 
   it('prompts for manual stack selection when stack is unknown', async () => {

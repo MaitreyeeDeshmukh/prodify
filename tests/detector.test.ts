@@ -54,12 +54,38 @@ describe('detectStack', () => {
       .mockResolvedValueOnce(false as never)  // no package.json
       .mockResolvedValueOnce(false as never)  // no requirements.txt
       .mockResolvedValueOnce(false as never)  // no pyproject.toml
-      .mockResolvedValueOnce(true as never);  // next.config.js exists
+      .mockResolvedValueOnce(true as never);  // next.config.js exists → short-circuits, .ts never checked
 
     const result = await detectStack('/fake/next-config-project');
 
     expect(result.type).toBe('nextjs');
     expect(result.confidence).toBe('medium');
+  });
+
+  it('detects Next.js from next.config.ts when no package.json', async () => {
+    fsMock.pathExists
+      .mockResolvedValueOnce(false as never)  // no package.json
+      .mockResolvedValueOnce(false as never)  // no requirements.txt
+      .mockResolvedValueOnce(false as never)  // no pyproject.toml
+      .mockResolvedValueOnce(false as never)  // no next.config.js
+      .mockResolvedValueOnce(true as never);  // next.config.ts exists
+
+    const result = await detectStack('/fake/next-config-ts-project');
+
+    expect(result.type).toBe('nextjs');
+    expect(result.confidence).toBe('medium');
+  });
+
+  it('falls through to unknown when package.json is malformed', async () => {
+    fsMock.pathExists.mockResolvedValueOnce(true as never); // package.json "exists"
+    fsMock.readJson.mockRejectedValueOnce(new Error('Unexpected token') as never);
+    // all subsequent pathExists calls return false
+    fsMock.pathExists.mockResolvedValue(false as never);
+
+    const result = await detectStack('/fake/broken-project');
+
+    expect(result.type).toBe('unknown');
+    expect(result.confidence).toBe('low');
   });
 
   it('returns unknown when nothing is recognized', async () => {

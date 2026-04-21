@@ -26,24 +26,28 @@ describe('logger', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('info() calls console.log once', () => {
+  it('info() logs the ℹ icon and message', () => {
     info('test message');
     expect(consoleSpy).toHaveBeenCalledTimes(1);
+    expect(consoleSpy).toHaveBeenCalledWith('ℹ', 'test message');
   });
 
-  it('success() calls console.log once', () => {
+  it('success() logs the ✓ icon and message', () => {
     success('it worked');
     expect(consoleSpy).toHaveBeenCalledTimes(1);
+    expect(consoleSpy).toHaveBeenCalledWith('✓', 'it worked');
   });
 
-  it('warn() calls console.log once', () => {
+  it('warn() logs the ⚠ icon and message', () => {
     warn('careful');
     expect(consoleSpy).toHaveBeenCalledTimes(1);
+    expect(consoleSpy).toHaveBeenCalledWith('⚠', 'careful');
   });
 
-  it('error() calls console.error once', () => {
+  it('error() calls console.error with ✗ icon and message', () => {
     error('something broke');
     expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+    expect(consoleErrorSpy).toHaveBeenCalledWith('✗', 'something broke');
   });
 
   it('verbose() does NOT log when verbose mode is off', () => {
@@ -52,19 +56,22 @@ describe('logger', () => {
     expect(consoleSpy).not.toHaveBeenCalled();
   });
 
-  it('verbose() logs when verbose mode is on', () => {
+  it('verbose() logs [verbose] prefix and message when on', () => {
     setVerbose(true);
     verbose('detailed info');
     expect(consoleSpy).toHaveBeenCalledTimes(1);
+    expect(consoleSpy).toHaveBeenCalledWith('[verbose]', 'detailed info');
   });
 
-  it('dryRun() calls console.log once', () => {
+  it('dryRun() logs [dry-run] prefix and message', () => {
     dryRun('would create file.ts');
     expect(consoleSpy).toHaveBeenCalledTimes(1);
+    expect(consoleSpy).toHaveBeenCalledWith('[dry-run]', 'would create file.ts');
   });
 
-  it('header() calls console.log once', () => {
+  it('header() logs message wrapped in newlines', () => {
     header('Prodify');
     expect(consoleSpy).toHaveBeenCalledTimes(1);
+    expect(consoleSpy).toHaveBeenCalledWith('\nProdify\n');
   });
 });

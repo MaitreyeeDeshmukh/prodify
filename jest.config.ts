@@ -8,4 +8,4 @@ const config: Config = {
   moduleFileExtensions: ['ts', 'js', 'json'],
 };
 
-export default config;
+module.exports = config;

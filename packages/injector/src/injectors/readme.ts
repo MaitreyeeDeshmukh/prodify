@@ -15,7 +15,7 @@ export function buildReadmeFile(answers: ProdifyAnswers): FileEntry[] {
 |-------|-------|----------|
 | Auth | NextAuth.js (${answers.userType}) | \`prodify-layer/auth/\` |
 | Payments | Stripe (${answers.pricingModel}) | \`prodify-layer/payments/\` |
-| Database | Prisma schema (${answers.userType}) | \`prodify-layer/db/schema.prisma\` |
+| Database | InsForge (${answers.userType}) | \`prodify-layer/db/\` |
 | API Routes | Next.js App Router | \`prodify-layer/routes/api/\` |
 | Environment | .env.example | \`.env.example\` |
 
@@ -30,21 +30,17 @@ export function buildReadmeFile(answers: ProdifyAnswers): FileEntry[] {
 - [ ] **Copy .env.example** → \`.env.local\` and fill in all values
 - [ ] **Install dependencies:**
   \`\`\`bash
-  npm install next-auth @auth/prisma-adapter stripe @prisma/client prisma
+  npm install next-auth @insforge/sdk stripe
   \`\`\`
-- [ ] **Copy the Prisma schema:**
+- [ ] **Run the InsForge schema** — open your InsForge project SQL editor and run:
   \`\`\`bash
-  cp prodify-layer/db/schema.prisma prisma/schema.prisma
-  npx prisma migrate dev --name init
+  cat prodify-layer/db/schema.sql
+  \`\`\`
+- [ ] **Copy the InsForge client** into \`lib/insforge.ts\`:
+  \`\`\`bash
+  cp prodify-layer/db/insforge.ts lib/insforge.ts
   \`\`\`
 - [ ] **Mount the API routes** — copy from \`prodify-layer/routes/api/\` into \`app/api/\`
-- [ ] **Create a \`lib/prisma.ts\`** singleton:
-  \`\`\`typescript
-  import { PrismaClient } from '@prisma/client';
-  const globalForPrisma = global as unknown as { prisma: PrismaClient };
-  export const prisma = globalForPrisma.prisma ?? new PrismaClient();
-  if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
-  \`\`\`
 - [ ] **Set up Stripe webhook** (local dev):
   \`\`\`bash
   stripe listen --forward-to localhost:3000/api/webhooks/stripe
@@ -68,7 +64,8 @@ prodify-layer/
 │       ├── webhooks/stripe/route.ts
 │       └── portal/route.ts
 ├── db/
-│   └── schema.prisma
+│   ├── insforge.ts
+│   └── schema.sql
 └── README-prodify.md
 \`\`\`
 `;

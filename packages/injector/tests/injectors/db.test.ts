@@ -2,36 +2,47 @@
 import { buildDbFiles } from '../../src/injectors/db';
 
 describe('buildDbFiles', () => {
-  it('returns a single schema file', () => {
+  it('returns two files: insforge client and sql schema', () => {
     const files = buildDbFiles('individuals');
-    expect(files).toHaveLength(1);
-    expect(files[0].relativePath).toBe('prodify-layer/db/schema.prisma');
+    expect(files).toHaveLength(2);
+    expect(files.map(f => f.relativePath)).toContain('prodify-layer/db/insforge.ts');
+    expect(files.map(f => f.relativePath)).toContain('prodify-layer/db/schema.sql');
   });
 
-  it('individuals schema has User and Subscription but no Organization', () => {
+  it('individuals schema has users and subscriptions but no organizations', () => {
     const files = buildDbFiles('individuals');
-    const schema = files[0].content;
+    const schema = files.find(f => f.relativePath === 'prodify-layer/db/schema.sql')!.content;
 
-    expect(schema).toContain('model User');
-    expect(schema).toContain('model Subscription');
-    expect(schema).toContain('model WebhookEvent');
-    expect(schema).not.toContain('model Organization');
+    expect(schema).toContain('CREATE TABLE IF NOT EXISTS users');
+    expect(schema).toContain('CREATE TABLE IF NOT EXISTS subscriptions');
+    expect(schema).toContain('CREATE TABLE IF NOT EXISTS webhook_events');
+    expect(schema).not.toContain('CREATE TABLE IF NOT EXISTS organizations');
   });
 
-  it('teams schema includes Organization and Membership models', () => {
+  it('teams schema includes organizations and memberships tables', () => {
     const files = buildDbFiles('teams');
-    const schema = files[0].content;
+    const schema = files.find(f => f.relativePath === 'prodify-layer/db/schema.sql')!.content;
 
-    expect(schema).toContain('model Organization');
-    expect(schema).toContain('model Membership');
-    expect(schema).toContain('model User');
+    expect(schema).toContain('CREATE TABLE IF NOT EXISTS organizations');
+    expect(schema).toContain('CREATE TABLE IF NOT EXISTS memberships');
+    expect(schema).toContain('CREATE TABLE IF NOT EXISTS users');
   });
 
-  it('enterprise schema includes Organization, Membership, and samlConfig', () => {
+  it('enterprise schema includes organizations with saml_config and memberships', () => {
     const files = buildDbFiles('enterprise');
-    const schema = files[0].content;
+    const schema = files.find(f => f.relativePath === 'prodify-layer/db/schema.sql')!.content;
 
-    expect(schema).toContain('model Organization');
-    expect(schema).toContain('samlConfig');
+    expect(schema).toContain('CREATE TABLE IF NOT EXISTS organizations');
+    expect(schema).toContain('saml_config');
+    expect(schema).toContain('CREATE TABLE IF NOT EXISTS memberships');
+  });
+
+  it('insforge client references @insforge/sdk', () => {
+    const files = buildDbFiles('individuals');
+    const client = files.find(f => f.relativePath === 'prodify-layer/db/insforge.ts')!.content;
+
+    expect(client).toContain('@insforge/sdk');
+    expect(client).toContain('createClient');
+    expect(client).toContain('INSFORGE_URL');
   });
 });

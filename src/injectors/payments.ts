@@ -148,7 +148,7 @@ const webhookRoute = `// prodify-layer/routes/api/webhooks/stripe/route.ts
 // Drop into app/api/webhooks/stripe/route.ts
 import { NextResponse } from 'next/server';
 import { stripe } from '@/prodify-layer/payments/stripe';
-import { prisma } from '@/lib/prisma';
+import { insforge } from '@/lib/insforge';
 import Stripe from 'stripe';
 
 export async function POST(req: Request) {
@@ -170,11 +170,12 @@ export async function POST(req: Request) {
   }
 
   // Persist raw event for idempotency / replay
-  await prisma.webhookEvent.upsert({
-    where: { stripeEventId: event.id },
-    create: { stripeEventId: event.id, type: event.type, payload: JSON.stringify(event) },
-    update: {},
-  });
+  await insforge.database
+    .from('webhook_events')
+    .upsert(
+      { stripe_event_id: event.id, type: event.type, payload: JSON.stringify(event) },
+      { onConflict: 'stripe_event_id' },
+    );
 
   switch (event.type) {
     case 'checkout.session.completed': {

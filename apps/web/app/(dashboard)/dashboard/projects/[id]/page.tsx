@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { insforge } from '@/lib/insforge';
 
 const MODULE_INFO: Record<string, { label: string; icon: string; desc: string; color: string; border: string }> = {
   auth: {
@@ -31,8 +31,13 @@ const MODULE_INFO: Record<string, { label: string; icon: string; desc: string; c
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
   const { id } = await params;
-  const project = await prisma.project.findUnique({ where: { id } });
-  if (!project || project.userId !== session!.user!.id!) notFound();
+  const { data: project, error } = await insforge.database
+    .from('projects')
+    .select('*')
+    .eq('id', id)
+    .eq('userId', session!.user!.id!)
+    .single();
+  if (error || !project) notFound();
 
   const created = new Date(project.createdAt).toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',

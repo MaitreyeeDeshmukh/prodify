@@ -6,10 +6,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { loginSchema, type LoginInput } from '@/lib/validations';
 
 export function LoginForm() {
@@ -21,69 +17,80 @@ export function LoginForm() {
 
   async function onSubmit(data: LoginInput) {
     setError('');
-    const result = await signIn('credentials', {
-      email: data.email,
-      password: data.password,
-      redirect: false,
-    });
-
-    if (result?.error) {
-      setError('Invalid email or password');
-      return;
-    }
-
+    const result = await signIn('credentials', { email: data.email, password: data.password, redirect: false });
+    if (result?.error) { setError('Invalid email or password'); return; }
     router.push('/dashboard');
     router.refresh();
   }
 
-  async function handleGitHub() {
-    await signIn('github', { callbackUrl: '/dashboard' });
-  }
-
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Sign in</CardTitle>
-        <CardDescription>Enter your credentials to access your dashboard</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <Button variant="outline" className="w-full" onClick={handleGitHub} type="button">
-          Continue with GitHub
-        </Button>
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-white px-2 text-gray-500">or</span>
-          </div>
+    <div className="glass-card rounded-3xl p-8">
+      <h2 className="text-xl font-bold mb-1" style={{ color: '#e3f4f8' }}>Welcome back</h2>
+      <p className="text-sm mb-6" style={{ color: '#8589b2' }}>Sign in to your account</p>
+
+      <button
+        type="button"
+        onClick={() => signIn('github', { callbackUrl: '/dashboard' })}
+        className="w-full flex items-center justify-center gap-3 py-3 px-6 rounded-full border text-sm font-medium transition-all duration-200 mb-5"
+        style={{ borderColor: '#323779', color: '#e3f4f8', background: 'transparent' }}
+        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#575efe'; (e.currentTarget as HTMLButtonElement).style.color = '#00d7ff'; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#323779'; (e.currentTarget as HTMLButtonElement).style.color = '#e3f4f8'; }}
+      >
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        Continue with GitHub
+      </button>
+
+      <div className="flex items-center gap-3 mb-5">
+        <div className="flex-1 h-px" style={{ background: '#323779' }} />
+        <span className="text-xs" style={{ color: '#8589b2' }}>OR</span>
+        <div className="flex-1 h-px" style={{ background: '#323779' }} />
+      </div>
+
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <div>
+          <label className="block text-xs font-medium mb-1.5" style={{ color: '#8589b2' }}>Email</label>
+          <input
+            type="email"
+            {...register('email')}
+            className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all"
+            style={{ background: '#1b1e3d', border: '1px solid #323779', color: '#e3f4f8' }}
+            onFocus={e => (e.target.style.borderColor = '#575efe')}
+            onBlur={e => (e.target.style.borderColor = '#323779')}
+            placeholder="you@example.com"
+          />
+          {errors.email && <p className="text-xs mt-1" style={{ color: '#ff6b6b' }}>{errors.email.message}</p>}
         </div>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
-          <div>
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" {...register('email')} />
-            {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email.message}</p>}
+        <div>
+          <div className="flex justify-between items-center mb-1.5">
+            <label className="text-xs font-medium" style={{ color: '#8589b2' }}>Password</label>
+            <Link href="/forgot-password" className="text-xs transition-colors" style={{ color: '#00d7ff' }}>Forgot?</Link>
           </div>
-          <div>
-            <div className="flex justify-between items-center mb-1">
-              <Label htmlFor="password">Password</Label>
-              <Link href="/forgot-password" className="text-xs text-blue-600 hover:underline">Forgot?</Link>
-            </div>
-            <Input id="password" type="password" {...register('password')} />
-            {errors.password && <p className="text-xs text-red-500 mt-1">{errors.password.message}</p>}
-          </div>
-          {error && <p className="text-sm text-red-500">{error}</p>}
-          <Button type="submit" className="w-full" disabled={isSubmitting}>
-            {isSubmitting ? 'Signing in...' : 'Sign in'}
-          </Button>
-        </form>
-      </CardContent>
-      <CardFooter className="justify-center">
-        <p className="text-sm text-gray-500">
-          No account?{' '}
-          <Link href="/signup" className="text-blue-600 hover:underline">Sign up</Link>
-        </p>
-      </CardFooter>
-    </Card>
+          <input
+            type="password"
+            {...register('password')}
+            className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all"
+            style={{ background: '#1b1e3d', border: '1px solid #323779', color: '#e3f4f8' }}
+            onFocus={e => (e.target.style.borderColor = '#575efe')}
+            onBlur={e => (e.target.style.borderColor = '#323779')}
+            placeholder="••••••••"
+          />
+          {errors.password && <p className="text-xs mt-1" style={{ color: '#ff6b6b' }}>{errors.password.message}</p>}
+        </div>
+        {error && <p className="text-sm" style={{ color: '#ff6b6b' }}>{error}</p>}
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="w-full py-3 px-6 rounded-full font-semibold text-sm transition-all duration-200 btn-glow disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ background: '#575efe', color: '#ffffff' }}
+        >
+          {isSubmitting ? 'Signing in...' : 'Sign in'}
+        </button>
+      </form>
+
+      <p className="text-center text-sm mt-6" style={{ color: '#8589b2' }}>
+        No account?{' '}
+        <Link href="/signup" className="font-medium transition-colors" style={{ color: '#00d7ff' }}>Sign up</Link>
+      </p>
+    </div>
   );
 }

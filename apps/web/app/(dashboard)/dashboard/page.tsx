@@ -13,12 +13,14 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Projects</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <h1 className="text-2xl font-black tracking-tight mb-1" style={{ fontFamily: 'var(--font-unbounded)', color: '#e3f4f8' }}>
+            Projects
+          </h1>
+          <p className="text-sm" style={{ color: '#8589b2' }}>
             {projects.length === 0
-              ? 'No projects yet — create your first one below.'
+              ? 'No projects yet — create your first one.'
               : `${projects.length} project${projects.length !== 1 ? 's' : ''}`}
           </p>
         </div>
@@ -26,10 +28,10 @@ export default async function DashboardPage() {
       </div>
 
       {projects.length === 0 ? (
-        <div className="border-2 border-dashed border-gray-200 rounded-xl p-16 text-center">
-          <div className="text-4xl mb-3">🚀</div>
-          <h3 className="text-base font-semibold text-gray-700 mb-1">Create your first project</h3>
-          <p className="text-sm text-gray-400 mb-6 max-w-xs mx-auto">
+        <div className="rounded-3xl p-16 text-center" style={{ border: '2px dashed #323779' }}>
+          <div className="text-5xl mb-4">🚀</div>
+          <h3 className="text-base font-bold mb-2" style={{ color: '#e3f4f8' }}>Create your first project</h3>
+          <p className="text-sm mb-8 max-w-xs mx-auto" style={{ color: '#8589b2' }}>
             Pick a name, choose your modules, and Prodify wires up the infrastructure.
           </p>
           <NewProjectDialog />
@@ -39,10 +41,7 @@ export default async function DashboardPage() {
           {projects.map(p => (
             <ProjectCard
               key={p.id}
-              project={{
-                ...p,
-                createdAt: p.createdAt.toISOString(),
-              }}
+              project={{ ...p, createdAt: p.createdAt.toISOString() }}
             />
           ))}
         </div>

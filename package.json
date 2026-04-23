@@ -1,33 +1,17 @@
 {
-  "name": "prodify",
+  "name": "prodify-monorepo",
   "version": "0.1.0",
+  "private": true,
   "description": "One command. Production-ready SaaS infrastructure injected into your existing codebase.",
-  "main": "dist/index.js",
-  "bin": {
-    "prodify": "./dist/index.js"
-  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
-    "build": "tsc",
-    "dev": "ts-node src/index.ts",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "chalk": "^4.1.2",
-    "commander": "^12.0.0",
-    "fs-extra": "^11.2.0",
-    "inquirer": "^8.2.6"
-  },
-  "devDependencies": {
-    "@types/fs-extra": "^11.0.4",
-    "@types/inquirer": "^8.2.10",
-    "@types/jest": "^29.5.12",
-    "@types/node": "^20.12.0",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.1.2",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.4.5"
+    "build": "npm run build --workspace=packages/injector",
+    "test": "npm run test --workspace=packages/injector",
+    "typecheck": "npm run typecheck --workspace=packages/injector && npm run typecheck --workspace=apps/web",
+    "dev:web": "npm run dev --workspace=apps/web"
   },
   "engines": {
     "node": ">=20.0.0"

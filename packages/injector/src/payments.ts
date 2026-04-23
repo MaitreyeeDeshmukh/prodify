@@ -119,6 +119,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/prodify-layer/auth/[...nextauth]';
 import { stripe } from '@/prodify-layer/payments/stripe';
+import { prisma } from '@/lib/prisma';
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -126,16 +127,29 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { priceId, quantity } = await req.json() as { priceId: string; quantity?: number };
+  // FIX: runtime validation — ensure priceId is present and a non-empty string
+  const body = await req.json() as { priceId?: unknown; quantity?: unknown };
+  if (!body.priceId || typeof body.priceId !== 'string') {
+    return NextResponse.json({ error: 'priceId is required' }, { status: 400 });
+  }
+  const priceId = body.priceId;
+  const quantity = typeof body.quantity === 'number' ? body.quantity : 1;
+
   const origin = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
 
-  // TODO: look up Stripe customerId from DB using session.user.id
-  const customerId = 'cus_placeholder';
+  // FIX: look up real Stripe customerId from DB — never use a placeholder at runtime
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { stripeCustomerId: true },
+  });
+  if (!user?.stripeCustomerId) {
+    return NextResponse.json({ error: 'No billing account found for this user' }, { status: 404 });
+  }
 
   const checkoutSession = await stripe.checkout.sessions.create({
-    customer: customerId,
+    customer: user.stripeCustomerId,
     mode: 'subscription',
-    line_items: [{ price: priceId, quantity: quantity ?? 1 }],
+    line_items: [{ price: priceId, quantity }],
     success_url: \`\${origin}/dashboard?success=1\`,
     cancel_url: \`\${origin}/pricing?canceled=1\`,
   });
@@ -169,12 +183,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Webhook signature failed' }, { status: 400 });
   }
 
-  // Persist raw event for idempotency / replay
-  await prisma.webhookEvent.upsert({
-    where: { stripeEventId: event.id },
-    create: { stripeEventId: event.id, type: event.type, payload: JSON.stringify(event) },
-    update: {},
-  });
+  // FIX: wrap upsert in try-catch — a DB error must not return 500 to Stripe
+  // (Stripe would retry indefinitely). Return 200 even on duplicate/DB errors.
+  try {
+    await prisma.webhookEvent.upsert({
+      where: { stripeEventId: event.id },
+      create: { stripeEventId: event.id, type: event.type, payload: JSON.stringify(event) },
+      update: {},
+    });
+  } catch (dbErr) {
+    console.error('[stripe-webhook] failed to persist event:', event.id, dbErr);
+    // Still continue processing — idempotency is best-effort here
+  }
 
   switch (event.type) {
     case 'checkout.session.completed': {
@@ -201,6 +221,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/prodify-layer/auth/[...nextauth]';
 import { stripe } from '@/prodify-layer/payments/stripe';
+import { prisma } from '@/lib/prisma';
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -210,11 +231,17 @@ export async function POST(req: Request) {
 
   const origin = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
 
-  // TODO: look up Stripe customerId from DB using session.user.id
-  const customerId = 'cus_placeholder';
+  // FIX: look up real Stripe customerId from DB — never use a placeholder at runtime
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { stripeCustomerId: true },
+  });
+  if (!user?.stripeCustomerId) {
+    return NextResponse.json({ error: 'No billing account found for this user' }, { status: 404 });
+  }
 
   const portalSession = await stripe.billingPortal.sessions.create({
-    customer: customerId,
+    customer: user.stripeCustomerId,
     return_url: \`\${origin}/dashboard\`,
   });
 

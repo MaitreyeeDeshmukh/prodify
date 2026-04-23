@@ -41,14 +41,26 @@ const FormField = <
 
 const useFormField = () => {
   const fieldContext = React.useContext(FormFieldContext)
-  const { getFieldState, formState } = useFormContext()
-  const fieldState = getFieldState(fieldContext.name, formState)
 
-  if (!fieldContext) {
+  // FIX: null check BEFORE accessing fieldContext.name to avoid logic error
+  if (!fieldContext.name) {
     throw new Error("useFormField should be used within <FormField>")
   }
 
-  return { name: fieldContext.name, ...fieldState }
+  const { getFieldState, formState } = useFormContext()
+  const fieldState = getFieldState(fieldContext.name, formState)
+  const itemContext = React.useContext(FormItemContext)
+
+  const { id } = itemContext
+
+  return {
+    id,
+    name: fieldContext.name,
+    formItemId: `${id}-form-item`,
+    formDescriptionId: `${id}-form-item-description`,
+    formMessageId: `${id}-form-item-message`,
+    ...fieldState,
+  }
 }
 
 type FormItemContextValue = { id: string }
@@ -73,10 +85,12 @@ const FormLabel = React.forwardRef<
   React.ElementRef<typeof Label>,
   React.ComponentPropsWithoutRef<typeof Label>
 >(({ className, ...props }, ref) => {
-  const { error } = useFormField()
+  const { error, formItemId } = useFormField()
   return (
     <Label
       ref={ref}
+      // FIX: htmlFor links the label to the input for accessibility
+      htmlFor={formItemId}
       className={cn(error && "text-destructive", className)}
       {...props}
     />
@@ -88,24 +102,54 @@ const FormControl = React.forwardRef<
   React.ElementRef<typeof Slot>,
   React.ComponentPropsWithoutRef<typeof Slot>
 >(({ ...props }, ref) => {
-  return <Slot ref={ref} {...props} />
+  const { error, formItemId, formDescriptionId, formMessageId } = useFormField()
+  return (
+    <Slot
+      ref={ref}
+      // FIX: attach id, aria-describedby, and aria-invalid for full accessibility
+      id={formItemId}
+      aria-describedby={
+        !error
+          ? formDescriptionId
+          : `${formDescriptionId} ${formMessageId}`
+      }
+      aria-invalid={!!error}
+      {...props}
+    />
+  )
 })
 FormControl.displayName = "FormControl"
 
 const FormDescription = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLParagraphElement>>(
-  ({ className, ...props }, ref) => (
-    <p ref={ref} className={cn("text-[0.8rem] text-muted-foreground", className)} {...props} />
-  )
+  ({ className, ...props }, ref) => {
+    const { formDescriptionId } = useFormField()
+    return (
+      // FIX: id matches the aria-describedby reference in FormControl
+      <p
+        ref={ref}
+        id={formDescriptionId}
+        className={cn("text-[0.8rem] text-muted-foreground", className)}
+        {...props}
+      />
+    )
+  }
 )
 FormDescription.displayName = "FormDescription"
 
 const FormMessage = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLParagraphElement>>(
   ({ className, children, ...props }, ref) => {
-    const { error } = useFormField()
+    const { error, formMessageId } = useFormField()
     const body = error ? String(error?.message) : children
     if (!body) return null
     return (
-      <p ref={ref} className={cn("text-[0.8rem] font-medium text-destructive", className)} {...props}>
+      // FIX: id matches the aria-describedby reference in FormControl when there's an error
+      <p
+        ref={ref}
+        id={formMessageId}
+        className={cn("text-[0.8rem] font-medium text-destructive", className)}
+        role="alert"
+        {...props}
+      >
         {body}
       </p>
     )

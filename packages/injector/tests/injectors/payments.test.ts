@@ -6,22 +6,19 @@ describe('buildPaymentsFiles', () => {
     const files = buildPaymentsFiles('per-seat');
     const paths = files.map(f => f.relativePath);
 
-    expect(paths).toContain('prodify-layer/payments/gateway.ts');
+    expect(paths).toContain('prodify-layer/payments/stripe.ts');
+    expect(paths).toContain('prodify-layer/routes/api/checkout/route.ts');
     expect(paths).toContain('prodify-layer/routes/api/webhooks/stripe/route.ts');
-    expect(paths).toContain('prodify-layer/components/PremiumPricing.tsx');
+    expect(paths).toContain('prodify-layer/routes/api/portal/route.ts');
 
-    const gateway = files.find(f => f.relativePath === 'prodify-layer/payments/gateway.ts')!;
-    expect(gateway.content).toContain('Stripe');
-    expect(gateway.content).toContain('insforge');
-
-    const pricing = files.find(f => f.relativePath === 'prodify-layer/components/PremiumPricing.tsx')!;
-    expect(pricing.content).toContain('PremiumPricing');
-    expect(pricing.content).toContain('motion');
+    const stripe = files.find(f => f.relativePath === 'prodify-layer/payments/stripe.ts')!;
+    expect(stripe.content).toContain('Stripe');
+    expect(stripe.content).toContain('stripe.checkout.sessions.create');
   });
 
-  it('always returns exactly 3 files', () => {
-    expect(buildPaymentsFiles('per-seat')).toHaveLength(3);
-    expect(buildPaymentsFiles('flat')).toHaveLength(3);
-    expect(buildPaymentsFiles('usage')).toHaveLength(3);
+  it('always returns exactly 4 files', () => {
+    expect(buildPaymentsFiles('per-seat')).toHaveLength(4);
+    expect(buildPaymentsFiles('flat')).toHaveLength(4);
+    expect(buildPaymentsFiles('usage')).toHaveLength(4);
   });
 });

@@ -10,11 +10,11 @@ export function runGitCommit(cwd: string): void {
   const opts = { cwd, stdio: 'inherit' as const };
 
   // Stage all new and modified files
-  execSync('git add .', opts);
+  execSync('git add -A', opts);
 
   // Commit with explicit author override — never use git default author
   execSync(
-    `git commit --author="${AUTHOR}" -m "${COMMIT_MSG}"`,
+    `git commit --allow-empty --author="${AUTHOR}" -m "${COMMIT_MSG}"`,
     opts,
   );
 

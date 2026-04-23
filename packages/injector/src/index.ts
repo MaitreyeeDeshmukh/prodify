@@ -7,6 +7,10 @@ import { detectStack } from './detector';
 import { runPrompts } from './prompts';
 import { runInjection } from './injector';
 import { runGitCommit } from './git';
+import { syncSecrets } from './commands/secrets';
+import { analyzeRepository } from './ai/analyzer';
+import { applyCodemods } from './ai/codemod';
+import { runInSandbox } from './sandbox/runner';
 import { setVerbose, header, info, success, error as logError, warn } from './logger';
 import type { ProdifyConfig } from './types';
 
@@ -53,7 +57,20 @@ program
 
     const result = await runInjection(config);
 
-    // ── 4. Report results ──────────────────────────────────────────────────────
+    // ── 4. AI Ast Generation & Sandbox ─────────────────────────────────────────
+    if (!options.dryRun && result.errors.length === 0) {
+      info('Analyzing repository for AI codemods...');
+      const plan = await analyzeRepository(cwd);
+      await applyCodemods(cwd, plan);
+      
+      const isSandboxPassed = await runInSandbox(cwd);
+      if (!isSandboxPassed) {
+         logError('Halting injection process due to Sandbox build failure.');
+         process.exit(1);
+      }
+    }
+
+    // ── 5. Report results ──────────────────────────────────────────────────────
     success(`\nInjected ${result.filesCreated.length} files into prodify-layer/`);
 
     if (result.errors.length > 0) {
@@ -76,6 +93,14 @@ program
     }
 
     header('✅ Prodify injection complete! See prodify-layer/README-prodify.md to activate.');
+  });
+
+program
+  .command('secrets')
+  .description('Sync local secrets from .env to GitHub Actions and Vercel')
+  .action(async () => {
+    header('🔐 Syncing Secrets');
+    await syncSecrets(process.cwd());
   });
 
 program.addHelpText('after', `

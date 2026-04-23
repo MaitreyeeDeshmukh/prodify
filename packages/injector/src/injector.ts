@@ -8,6 +8,7 @@ import { buildPaymentsFiles } from './injectors/payments';
 import { buildDbFiles } from './injectors/db';
 import { buildEnvFile } from './injectors/env';
 import { buildReadmeFile } from './injectors/readme';
+import { buildGithubFiles } from './injectors/github';
 import { dryRun as logDryRun, verbose, success, error as logError } from './logger';
 import type { FileEntry, InjectionResult, ProdifyConfig } from './types';
 
@@ -22,6 +23,7 @@ export async function runInjection(config: ProdifyConfig): Promise<InjectionResu
     ...buildDbFiles(answers.userType),
     ...buildEnvFile(answers),
     ...buildReadmeFile(answers),
+    ...buildGithubFiles(),
   ];
 
   // ── Write (or dry-run log) each file ─────────────────────────────────────────

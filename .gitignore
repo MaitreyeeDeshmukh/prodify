@@ -11,6 +11,14 @@ yarn-debug.log*
 yarn-error.log*
 *.log
 
+# Graphify & local tooling outputs
+.graphify_cached.json
+.graphify_python
+.graphify_uncached.txt
+graphify-out/
+seed-test.js
+test-prisma.js
+
 # InsForge & AI agent skills
 .insforge
 .agent

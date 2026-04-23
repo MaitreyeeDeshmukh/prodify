@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { insforge } from "@/lib/insforge";
 import { forgotPasswordSchema } from "@/lib/validations";
-import { createPasswordResetToken } from "@/lib/tokens";
-import { sendPasswordResetEmail } from "@/lib/email";
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,18 +16,16 @@ export async function POST(req: NextRequest) {
 
     const { email } = result.data;
 
-    // Always return success to prevent email enumeration
-    const user = await prisma.user.findUnique({ where: { email } });
-
-    if (user) {
-      const token = await createPasswordResetToken(user.id);
-      await sendPasswordResetEmail(email, token);
-    }
+    // InsForge prevents email enumeration internally — always returns success
+    await insforge.auth.sendResetPasswordEmail({
+      email,
+      redirectTo: `${process.env.NEXTAUTH_URL}/reset-password`,
+    });
 
     return NextResponse.json(
       {
         message:
-          "If an account with that email exists, we sent a reset link.",
+          "If an account with that email exists, we sent a reset code.",
       },
       { status: 200 }
     );

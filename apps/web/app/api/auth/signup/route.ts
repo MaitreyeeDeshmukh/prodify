@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
+import { insforge } from "@/lib/insforge";
 import { signupSchema } from "@/lib/validations";
 
 export async function POST(req: NextRequest) {
@@ -17,23 +16,38 @@ export async function POST(req: NextRequest) {
 
     const { name, email, password } = result.data;
 
-    // Check for existing user
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) {
+    const { data, error } = await insforge.auth.signUp({
+      email,
+      password,
+      name,
+      redirectTo: `${process.env.NEXTAUTH_URL}/login`,
+    });
+
+    if (error) {
+      // Map InsForge error codes to user-friendly messages
+      const msg = error.message ?? "Something went wrong";
+      const status =
+        typeof (error as { statusCode?: number }).statusCode === "number"
+          ? (error as { statusCode?: number }).statusCode!
+          : 400;
+      return NextResponse.json({ error: msg }, { status });
+    }
+
+    if (data?.requireEmailVerification) {
       return NextResponse.json(
-        { error: { email: ["An account with this email already exists"] } },
-        { status: 409 }
+        {
+          requireEmailVerification: true,
+          message:
+            "Account created! Check your email for a verification code.",
+        },
+        { status: 201 }
       );
     }
 
-    const hashedPassword = await bcrypt.hash(password, 12);
-
-    const user = await prisma.user.create({
-      data: { name, email, password: hashedPassword },
-      select: { id: true, name: true, email: true, createdAt: true },
-    });
-
-    return NextResponse.json({ user }, { status: 201 });
+    return NextResponse.json(
+      { user: { id: data?.user?.id, email: data?.user?.email } },
+      { status: 201 }
+    );
   } catch (err) {
     console.error("[signup] unexpected error:", err);
     return NextResponse.json(

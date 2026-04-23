@@ -1,94 +1,227 @@
 'use client';
 
 import { useState } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
-const schema = z.object({ name: z.string().min(1, 'Name is required') });
-type FormData = z.infer<typeof schema>;
+const profileSchema = z.object({ name: z.string().min(1, 'Name is required').max(64) });
+type ProfileData = z.infer<typeof profileSchema>;
+
+const passwordSchema = z.object({
+  currentPassword: z.string().min(1, 'Required'),
+  newPassword: z.string().min(6, 'At least 6 characters'),
+  confirmPassword: z.string(),
+}).refine(d => d.newPassword === d.confirmPassword, {
+  message: 'Passwords do not match',
+  path: ['confirmPassword'],
+});
+type PasswordData = z.infer<typeof passwordSchema>;
+
+function Section({ children }: { children: React.ReactNode }) {
+  return <div className="space-y-6">{children}</div>;
+}
 
 export default function SettingsPage() {
   const { data: session, update } = useSession();
-  const [saved, setSaved] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [activeTab, setActiveTab] = useState<'profile' | 'password' | 'danger'>('profile');
 
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
-    resolver: zodResolver(schema),
+  const initials = session?.user?.name?.slice(0, 2).toUpperCase() ?? 'U';
+
+  const { register: regP, handleSubmit: hsP, formState: { errors: errP, isSubmitting: submP } } = useForm<ProfileData>({
+    resolver: zodResolver(profileSchema),
     defaultValues: { name: session?.user?.name ?? '' },
   });
 
-  async function onSubmit(data: FormData) {
+  const { register: regPw, handleSubmit: hsPw, reset: resetPw, formState: { errors: errPw, isSubmitting: submPw } } = useForm<PasswordData>({
+    resolver: zodResolver(passwordSchema),
+  });
+
+  async function onProfileSubmit(data: ProfileData) {
     await fetch('/api/user/profile', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     await update({ name: data.name });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setProfileSaved(true);
+    setTimeout(() => setProfileSaved(false), 2500);
   }
 
-  const initials = session?.user?.name?.slice(0, 2).toUpperCase() ?? 'U';
+  async function onPasswordSubmit(data: PasswordData) {
+    setPasswordMsg('');
+    setPasswordError('');
+    const res = await fetch('/api/user/password', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (res.ok) {
+      setPasswordMsg('Password updated successfully.');
+      resetPw();
+    } else {
+      const j = await res.json() as { error?: string };
+      setPasswordError(j.error ?? 'Failed to update password.');
+    }
+  }
+
+  const TABS = [
+    { key: 'profile', label: 'Profile' },
+    { key: 'password', label: 'Password' },
+    { key: 'danger', label: 'Danger Zone' },
+  ] as const;
 
   return (
-    <div className="max-w-lg">
-      <h1 className="text-2xl font-black tracking-tight mb-6" style={{ fontFamily: 'var(--font-unbounded)', color: '#e3f4f8' }}>
-        Settings
-      </h1>
+    <div className="max-w-2xl">
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+        <p className="text-gray-500 text-sm mt-1">Manage your account settings and preferences</p>
+      </div>
 
-      <div className="rounded-3xl p-6 mb-4" style={{ background: '#25284c', border: '1px solid #323779' }}>
-        <h3 className="text-sm font-semibold mb-1" style={{ color: '#e3f4f8' }}>Profile</h3>
-        <p className="text-xs mb-5" style={{ color: '#8589b2' }}>Update your display name</p>
-
-        <div className="flex items-center gap-4 mb-5">
-          <div
-            className="h-14 w-14 rounded-full flex items-center justify-center text-lg font-bold shrink-0"
-            style={{ background: 'rgba(87,94,254,0.2)', color: '#575efe', border: '1px solid rgba(87,94,254,0.3)' }}
-          >
-            {initials}
-          </div>
-          <div>
-            <p className="text-sm font-medium" style={{ color: '#e3f4f8' }}>{session?.user?.email}</p>
-            <p className="text-xs mt-0.5" style={{ color: '#8589b2' }}>Avatar is pulled from GitHub or Google</p>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: '#8589b2' }}>Display name</label>
-            <input
-              {...register('name')}
-              className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all"
-              style={{ background: '#1b1e3d', border: '1px solid #323779', color: '#e3f4f8' }}
-              onFocus={e => (e.target.style.borderColor = '#575efe')}
-              onBlur={e => (e.target.style.borderColor = '#323779')}
-            />
-            {errors.name && <p className="text-xs mt-1" style={{ color: '#ff6b6b' }}>{errors.name.message}</p>}
-          </div>
+      {/* Tab nav */}
+      <div className="flex gap-1 border-b border-gray-200 mb-6">
+        {TABS.map(tab => (
           <button
-            type="submit"
-            disabled={isSubmitting}
-            className="px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-200 btn-glow disabled:opacity-50"
-            style={{ background: saved ? '#00d7ff' : '#575efe', color: '#ffffff' }}
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+              activeTab === tab.key
+                ? 'border-violet-600 text-violet-700'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
           >
-            {saved ? 'Saved!' : isSubmitting ? 'Saving...' : 'Save changes'}
+            {tab.label}
           </button>
-        </form>
+        ))}
       </div>
 
-      <div className="rounded-3xl p-6" style={{ background: '#25284c', border: '1px solid #323779' }}>
-        <h3 className="text-sm font-semibold mb-1" style={{ color: '#e3f4f8' }}>Connected accounts</h3>
-        <p className="text-xs mb-4" style={{ color: '#8589b2' }}>OAuth providers linked to your account</p>
-        <div className="flex items-center gap-3 p-3 rounded-2xl" style={{ background: '#1b1e3d', border: '1px solid #323779' }}>
-          <svg width="18" height="18" viewBox="0 0 16 16" fill="#e3f4f8"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-          <span className="text-sm font-medium" style={{ color: '#e3f4f8' }}>GitHub</span>
-          <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full"
-            style={{ background: 'rgba(0,215,255,0.1)', color: '#00d7ff' }}>
-            Connected
-          </span>
-        </div>
-      </div>
+      {/* Profile tab */}
+      {activeTab === 'profile' && (
+        <Section>
+          <Card>
+            <CardHeader>
+              <CardTitle>Profile</CardTitle>
+              <CardDescription>Update your public display information</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="flex items-center gap-4">
+                <Avatar className="h-16 w-16">
+                  <AvatarImage src={session?.user?.image ?? undefined} />
+                  <AvatarFallback className="text-lg bg-violet-100 text-violet-700 font-semibold">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-medium text-sm text-gray-900">{session?.user?.name}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{session?.user?.email}</p>
+                  <p className="text-xs text-gray-400 mt-1">Avatar is pulled from your OAuth provider</p>
+                </div>
+              </div>
+
+              <form onSubmit={hsP(onProfileSubmit)} className="space-y-4">
+                <div>
+                  <Label htmlFor="name">Display name</Label>
+                  <Input id="name" {...regP('name')} placeholder="Your name" />
+                  {errP.name && <p className="text-xs text-red-500 mt-1">{errP.name.message}</p>}
+                </div>
+                <div>
+                  <Label htmlFor="email-ro">Email</Label>
+                  <Input id="email-ro" value={session?.user?.email ?? ''} disabled className="bg-gray-50 text-gray-400" />
+                  <p className="text-xs text-gray-400 mt-1">Email cannot be changed directly. Contact support.</p>
+                </div>
+                <Button type="submit" disabled={submP} className="bg-violet-600 hover:bg-violet-700">
+                  {profileSaved ? '✓ Saved!' : submP ? 'Saving...' : 'Save changes'}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </Section>
+      )}
+
+      {/* Password tab */}
+      {activeTab === 'password' && (
+        <Section>
+          <Card>
+            <CardHeader>
+              <CardTitle>Change Password</CardTitle>
+              <CardDescription>Update your account password. Leave blank to keep current.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={hsPw(onPasswordSubmit)} className="space-y-4">
+                <div>
+                  <Label htmlFor="current-pw">Current password</Label>
+                  <Input id="current-pw" type="password" {...regPw('currentPassword')} />
+                  {errPw.currentPassword && <p className="text-xs text-red-500 mt-1">{errPw.currentPassword.message}</p>}
+                </div>
+                <div>
+                  <Label htmlFor="new-pw">New password</Label>
+                  <Input id="new-pw" type="password" {...regPw('newPassword')} />
+                  {errPw.newPassword && <p className="text-xs text-red-500 mt-1">{errPw.newPassword.message}</p>}
+                </div>
+                <div>
+                  <Label htmlFor="confirm-pw">Confirm new password</Label>
+                  <Input id="confirm-pw" type="password" {...regPw('confirmPassword')} />
+                  {errPw.confirmPassword && <p className="text-xs text-red-500 mt-1">{errPw.confirmPassword.message}</p>}
+                </div>
+                {passwordMsg && <p className="text-sm text-emerald-600">{passwordMsg}</p>}
+                {passwordError && <p className="text-sm text-red-500">{passwordError}</p>}
+                <Button type="submit" disabled={submPw} className="bg-violet-600 hover:bg-violet-700">
+                  {submPw ? 'Updating...' : 'Update password'}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </Section>
+      )}
+
+      {/* Danger zone tab */}
+      {activeTab === 'danger' && (
+        <Section>
+          <Card className="border-red-200">
+            <CardHeader>
+              <CardTitle className="text-red-700">Danger Zone</CardTitle>
+              <CardDescription>Irreversible actions. Proceed with caution.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-100">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Sign out everywhere</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Revoke all active sessions across all devices</p>
+                </div>
+                <Button
+                  variant="outline"
+                  className="border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400"
+                  onClick={() => signOut({ callbackUrl: '/login' })}
+                >
+                  Sign out
+                </Button>
+              </div>
+              <div className="flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-100">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Delete account</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Permanently delete your account and all data. Cannot be undone.</p>
+                </div>
+                <Button
+                  variant="outline"
+                  className="border-red-300 text-red-700 hover:bg-red-100"
+                  onClick={() => alert('Account deletion coming soon. Contact support@prodify.app')}
+                >
+                  Delete account
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </Section>
+      )}
     </div>
   );
 }

@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
+import { insforge } from "@/lib/insforge";
 import { resetPasswordSchema } from "@/lib/validations";
-import {
-  validatePasswordResetToken,
-  deletePasswordResetToken,
-} from "@/lib/tokens";
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,13 +16,17 @@ export async function POST(req: NextRequest) {
 
     const { token, password } = result.data;
 
-    const userId = await validatePasswordResetToken(token);
-    if (!userId) {
+    const { data, error } = await insforge.auth.resetPassword({
+      otp: token,
+      newPassword: password,
+    });
+
+    if (error) {
       return NextResponse.json(
         {
           error: {
             token: [
-              "This reset link is invalid or has expired. Please request a new one.",
+              "This reset code is invalid or has expired. Please request a new one.",
             ],
           },
         },
@@ -35,18 +34,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const hashedPassword = await bcrypt.hash(password, 12);
-
-    await prisma.user.update({
-      where: { id: userId },
-      data: { password: hashedPassword },
-    });
-
-    // Consume the token — one-time use
-    await deletePasswordResetToken(token);
-
     return NextResponse.json(
-      { message: "Password reset successfully. You can now sign in." },
+      { message: data?.message ?? "Password reset successfully. You can now sign in." },
       { status: 200 }
     );
   } catch (err) {

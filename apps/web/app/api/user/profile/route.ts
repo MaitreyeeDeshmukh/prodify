@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { updateProfileSchema } from "@/lib/validations";
 
 export async function PATCH(req: NextRequest) {

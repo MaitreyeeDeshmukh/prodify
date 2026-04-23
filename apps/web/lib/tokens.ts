@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import prisma from "./prisma";
+import { prisma } from "./prisma";
 
 const TOKEN_EXPIRY_HOURS = 1;
 

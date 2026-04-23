@@ -16,14 +16,12 @@ export function Header() {
   return (
     <header className="h-14 border-b bg-white flex items-center justify-end px-6 shrink-0">
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button className="flex items-center gap-2 text-sm hover:opacity-80 transition-opacity">
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={session?.user?.image ?? undefined} />
-              <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-            </Avatar>
-            <span className="text-gray-700">{session?.user?.name}</span>
-          </button>
+        <DropdownMenuTrigger className="flex items-center gap-2 text-sm hover:opacity-80 transition-opacity">
+          <Avatar className="h-8 w-8">
+            <AvatarImage src={session?.user?.image ?? undefined} />
+            <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+          </Avatar>
+          <span className="text-gray-700">{session?.user?.name}</span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onClick={() => signOut({ callbackUrl: '/login' })}>

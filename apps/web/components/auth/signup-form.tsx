@@ -73,6 +73,11 @@ export function SignupForm() {
             <Input id="password" type="password" {...register('password')} />
             {errors.password && <p className="text-xs text-red-500 mt-1">{errors.password.message}</p>}
           </div>
+          <div>
+            <Label htmlFor="confirmPassword">Confirm password</Label>
+            <Input id="confirmPassword" type="password" {...register('confirmPassword')} />
+            {errors.confirmPassword && <p className="text-xs text-red-500 mt-1">{errors.confirmPassword.message}</p>}
+          </div>
           {error && <p className="text-sm text-red-500">{error}</p>}
           <Button type="submit" className="w-full" disabled={isSubmitting}>
             {isSubmitting ? 'Creating account...' : 'Create account'}

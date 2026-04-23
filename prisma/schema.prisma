@@ -78,6 +78,9 @@ model Project {
   id          String   @id @default(cuid())
   name        String
   description String?
+  modules     String[]
+  status      String   @default("draft")
+  repoUrl     String?
   userId      String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

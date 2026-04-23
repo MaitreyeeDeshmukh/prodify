@@ -1,12 +1,10 @@
 import { NextAuthOptions } from 'next-auth';
-import { PrismaAdapter } from '@auth/prisma-adapter';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GitHubProvider from 'next-auth/providers/github';
-import bcrypt from 'bcryptjs';
-import { prisma } from './prisma';
+import { insforge } from './insforge';
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma) as NextAuthOptions['adapter'],
+  // No PrismaAdapter — sessions are JWT-only; user records live in InsForge
   session: { strategy: 'jwt' },
   pages: {
     signIn: '/login',
@@ -26,22 +24,32 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
+        const { data, error } = await insforge.auth.signInWithPassword({
+          email: credentials.email,
+          password: credentials.password,
         });
 
-        if (!user || !user.password) return null;
+        if (error || !data?.user) return null;
 
-        const valid = await bcrypt.compare(credentials.password, user.password);
-        if (!valid) return null;
-
-        return { id: user.id, email: user.email, name: user.name, image: user.image };
+        // Store the InsForge access token in the token so we can use it for
+        // authenticated InsForge SDK calls later (stored in JWT, not exposed to client)
+        return {
+          id: data.user.id,
+          email: data.user.email,
+          name: data.user.profile?.name ?? null,
+          image: data.user.profile?.avatar_url ?? null,
+          // Carry the InsForge access token inside the Next-Auth JWT
+          accessToken: data.accessToken,
+        };
       },
     }),
   ],
   callbacks: {
     async jwt({ token, user }) {
-      if (user) token.id = user.id;
+      if (user) {
+        token.id = user.id;
+        token.accessToken = (user as { accessToken?: string }).accessToken;
+      }
       return token;
     },
     async session({ session, token }) {

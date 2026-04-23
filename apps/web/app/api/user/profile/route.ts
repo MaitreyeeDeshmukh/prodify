@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { prisma } from "@/lib/prisma";
+import { authOptions } from "@/lib/auth";
+import { insforge } from "@/lib/insforge";
 import { updateProfileSchema } from "@/lib/validations";
 
 export async function PATCH(req: NextRequest) {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
 
-    if (!session?.user?.email) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -23,11 +24,17 @@ export async function PATCH(req: NextRequest) {
 
     const { name, image } = result.data;
 
-    const updatedUser = await prisma.user.update({
-      where: { email: session.user.email },
-      data: { ...(name && { name }), ...(image && { image }) },
-      select: { id: true, name: true, email: true, image: true },
-    });
+    const { data: updatedUser, error } = await insforge.database
+      .from('users')
+      .update({ ...(name && { name }), ...(image && { image }) })
+      .eq('id', session.user.id)
+      .select('id, name, email, image')
+      .single();
+
+    if (error) {
+      console.error("[profile PATCH] error:", error);
+      return NextResponse.json({ error: "Failed to update profile" }, { status: 500 });
+    }
 
     return NextResponse.json({ user: updatedUser }, { status: 200 });
   } catch (err) {

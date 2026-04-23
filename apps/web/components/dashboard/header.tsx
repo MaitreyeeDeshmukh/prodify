@@ -1,7 +1,6 @@
 'use client';
 
 import { signOut, useSession } from 'next-auth/react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,14 +13,17 @@ export function Header() {
   const initials = session?.user?.name?.slice(0, 2).toUpperCase() ?? 'U';
 
   return (
-    <header className="h-14 border-b bg-white flex items-center justify-end px-6 shrink-0">
+    <header className="h-14 flex items-center justify-end px-6 shrink-0"
+      style={{ background: '#1b1e3d', borderBottom: '1px solid #323779' }}>
       <DropdownMenu>
-        <DropdownMenuTrigger className="flex items-center gap-2 text-sm hover:opacity-80 transition-opacity">
-          <Avatar className="h-8 w-8">
-            <AvatarImage src={session?.user?.image ?? undefined} />
-            <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-          </Avatar>
-          <span className="text-gray-700">{session?.user?.name}</span>
+        <DropdownMenuTrigger className="flex items-center gap-2.5 text-sm transition-opacity hover:opacity-80 outline-none">
+          <div
+            className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+            style={{ background: '#575efe', color: '#ffffff' }}
+          >
+            {initials}
+          </div>
+          <span style={{ color: '#e3f4f8' }}>{session?.user?.name}</span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onClick={() => signOut({ callbackUrl: '/login' })}>

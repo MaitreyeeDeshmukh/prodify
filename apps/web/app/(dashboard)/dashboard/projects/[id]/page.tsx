@@ -4,31 +4,33 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
-const MODULE_INFO: Record<string, { label: string; icon: string; desc: string; color: string }> = {
+const MODULE_INFO: Record<string, { label: string; icon: string; desc: string; color: string; border: string }> = {
   auth: {
     label: 'Authentication',
     icon: '🔐',
     desc: 'Email + password sign-up/login, GitHub OAuth, JWT sessions, forgot/reset password flow, middleware route protection.',
-    color: 'bg-blue-50 border-blue-200 text-blue-900',
+    color: 'rgba(87,94,254,0.08)',
+    border: 'rgba(87,94,254,0.3)',
   },
   database: {
     label: 'Database',
     icon: '🗄️',
     desc: 'Prisma ORM with PostgreSQL. Schema auto-generated for your models. Neon serverless DB compatible. Migration scripts included.',
-    color: 'bg-purple-50 border-purple-200 text-purple-900',
+    color: 'rgba(0,215,255,0.08)',
+    border: 'rgba(0,215,255,0.3)',
   },
   payments: {
     label: 'Payments',
     icon: '💳',
     desc: 'Stripe Checkout sessions, webhook handler with idempotency, customer portal, subscription status synced to DB.',
-    color: 'bg-green-50 border-green-200 text-green-900',
+    color: 'rgba(0,215,255,0.05)',
+    border: 'rgba(87,94,254,0.2)',
   },
 };
 
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
   const { id } = await params;
-
   const project = await prisma.project.findUnique({ where: { id } });
   if (!project || project.userId !== session!.user!.id!) notFound();
 
@@ -39,72 +41,73 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   return (
     <div className="max-w-2xl">
       <div className="mb-6">
-        <Link href="/dashboard" className="text-sm text-gray-400 hover:text-gray-600 transition-colors">
+        <Link href="/dashboard" className="text-sm transition-colors" style={{ color: '#8589b2' }}
+          onMouseEnter={undefined}>
           ← All projects
         </Link>
       </div>
 
       <div className="flex items-center gap-3 mb-1">
-        <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-          project.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-        }`}>
+        <h1 className="text-2xl font-black tracking-tight" style={{ fontFamily: 'var(--font-unbounded)', color: '#e3f4f8' }}>
+          {project.name}
+        </h1>
+        <span
+          className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
+          style={project.status === 'active'
+            ? { background: 'rgba(0,215,255,0.1)', color: '#00d7ff' }
+            : { background: 'rgba(133,137,178,0.15)', color: '#8589b2' }
+          }
+        >
           {project.status === 'active' ? 'Active' : 'Draft'}
         </span>
       </div>
       {project.description && (
-        <p className="text-gray-500 text-sm mb-1">{project.description}</p>
+        <p className="text-sm mb-1" style={{ color: '#8589b2' }}>{project.description}</p>
       )}
-      <p className="text-xs text-gray-400 mb-8">Created {created}</p>
+      <p className="text-xs mb-8" style={{ color: '#8589b2' }}>Created {created}</p>
 
-      <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">
+      <h2 className="text-xs font-semibold uppercase tracking-widest mb-4" style={{ color: '#8589b2' }}>
         Injected modules
       </h2>
       <div className="space-y-3 mb-8">
         {project.modules.map(mod => {
-          const info = MODULE_INFO[mod] ?? { label: mod, icon: '📦', desc: '', color: 'bg-gray-50 border-gray-200 text-gray-900' };
+          const info = MODULE_INFO[mod] ?? { label: mod, icon: '📦', desc: '', color: 'rgba(87,94,254,0.08)', border: '#323779' };
           return (
-            <div key={mod} className={`border rounded-xl p-4 ${info.color}`}>
-              <div className="flex items-center gap-2 mb-1">
+            <div key={mod} className="rounded-2xl p-4" style={{ background: info.color, border: `1px solid ${info.border}` }}>
+              <div className="flex items-center gap-2 mb-1.5">
                 <span className="text-lg">{info.icon}</span>
-                <span className="font-semibold text-sm">{info.label}</span>
-                <span className="ml-auto text-xs font-medium opacity-60">Injected</span>
+                <span className="font-semibold text-sm" style={{ color: '#e3f4f8' }}>{info.label}</span>
+                <span className="ml-auto text-xs font-medium" style={{ color: '#00d7ff' }}>✓ Injected</span>
               </div>
-              <p className="text-xs opacity-80 leading-relaxed">{info.desc}</p>
+              <p className="text-xs leading-relaxed" style={{ color: '#8589b2' }}>{info.desc}</p>
             </div>
           );
         })}
       </div>
 
       {project.repoUrl && (
-        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-8">
-          <div className="text-sm font-medium text-gray-700 mb-1">GitHub repository</div>
-          <a
-            href={project.repoUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-indigo-600 hover:underline break-all"
-          >
+        <div className="rounded-2xl p-4 mb-8" style={{ background: '#25284c', border: '1px solid #323779' }}>
+          <div className="text-sm font-medium mb-1" style={{ color: '#e3f4f8' }}>GitHub repository</div>
+          <a href={project.repoUrl} target="_blank" rel="noopener noreferrer"
+            className="text-sm break-all" style={{ color: '#575efe' }}>
             {project.repoUrl}
           </a>
         </div>
       )}
 
-      <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-        <div className="text-sm font-semibold text-gray-700 mb-2">Next steps</div>
-        <ol className="space-y-2">
-          <li className="flex gap-2 text-sm text-gray-600">
-            <span className="text-indigo-500 font-mono font-semibold">1.</span>
-            Run <code className="bg-white border border-gray-200 px-1.5 py-0.5 rounded text-xs font-mono">npx prodify inject</code> in your project directory
-          </li>
-          <li className="flex gap-2 text-sm text-gray-600">
-            <span className="text-indigo-500 font-mono font-semibold">2.</span>
-            Add your environment variables to <code className="bg-white border border-gray-200 px-1.5 py-0.5 rounded text-xs font-mono">.env.local</code>
-          </li>
-          <li className="flex gap-2 text-sm text-gray-600">
-            <span className="text-indigo-500 font-mono font-semibold">3.</span>
-            Push to GitHub — Prodify creates a branch and opens a PR automatically
-          </li>
+      <div className="rounded-2xl p-5" style={{ background: '#25284c', border: '1px solid #323779' }}>
+        <div className="text-sm font-semibold mb-3" style={{ color: '#e3f4f8' }}>Next steps</div>
+        <ol className="space-y-3">
+          {[
+            <>Run <code className="px-1.5 py-0.5 rounded text-xs font-mono" style={{ background: '#1b1e3d', color: '#00d7ff', border: '1px solid #323779' }}>npx prodify inject</code> in your project directory</>,
+            <>Add your environment variables to <code className="px-1.5 py-0.5 rounded text-xs font-mono" style={{ background: '#1b1e3d', color: '#00d7ff', border: '1px solid #323779' }}>.env.local</code></>,
+            <>Push to GitHub — Prodify creates a branch and opens a PR automatically</>,
+          ].map((step, i) => (
+            <li key={i} className="flex gap-3 text-sm" style={{ color: '#8589b2' }}>
+              <span className="font-mono font-bold shrink-0" style={{ color: '#575efe' }}>{i + 1}.</span>
+              <span>{step}</span>
+            </li>
+          ))}
         </ol>
       </div>
     </div>

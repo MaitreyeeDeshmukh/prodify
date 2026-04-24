@@ -11,24 +11,19 @@ export function ResetPasswordForm() {
   const router = useRouter();
   const params = useSearchParams();
   const tokenFromUrl = params.get('token');
-  const [manualCode, setManualCode] = useState('');
   const [error, setError] = useState('');
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<ResetPasswordInput>({
     resolver: zodResolver(resetPasswordSchema),
   });
 
-  const token = tokenFromUrl ?? manualCode.trim();
+  const [token, setToken] = useState(tokenFromUrl || '');
 
   async function onSubmit(data: ResetPasswordInput) {
     setError('');
-    if (!token) {
-      setError('Please enter the reset code from your email.');
-      return;
-    }
     const res = await fetch('/api/auth/reset-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...data, token }),
+      body: JSON.stringify({ ...data, token: tokenFromUrl || data.token }),
     });
     if (!res.ok) {
       const json = await res.json() as { error?: string };
@@ -48,17 +43,17 @@ export function ResetPasswordForm() {
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         {!tokenFromUrl && (
           <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: '#8589b2' }}>Reset code</label>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: '#8589b2' }}>Reset Code</label>
             <input
               type="text"
-              value={manualCode}
-              onChange={e => setManualCode(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all tracking-widest text-center"
+              {...register('token')}
+              className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all"
               style={inputStyle}
               onFocus={e => (e.target.style.borderColor = '#575efe')}
               onBlur={e => (e.target.style.borderColor = '#323779')}
-              placeholder="Paste code from email"
+              placeholder="Enter 6-digit code"
             />
+            {errors.token && <p className="text-xs mt-1" style={{ color: '#ff6b6b' }}>{errors.token.message}</p>}
           </div>
         )}
         <div>

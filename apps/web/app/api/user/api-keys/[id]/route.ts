@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { insforge } from '@/lib/insforge';
+import { insforge, getUserInsforge } from '@/lib/insforge';
 
 // PATCH — rename a key
 export async function PATCH(
@@ -18,7 +18,9 @@ export async function PATCH(
   const name = body.name?.trim();
   if (!name) return NextResponse.json({ error: 'Name is required' }, { status: 400 });
 
-  const { data: key, error } = await insforge.database
+  const userInsforge = getUserInsforge((session as any).accessToken);
+
+  const { data: key, error } = await userInsforge.database
     .from('api_keys')
     .update({ name })
     .eq('id', id)
@@ -45,7 +47,9 @@ export async function DELETE(
 
   const { id } = await params;
 
-  const { error } = await insforge.database
+  const userInsforge = getUserInsforge((session as any).accessToken);
+
+  const { error } = await userInsforge.database
     .from('api_keys')
     .delete()
     .eq('id', id)

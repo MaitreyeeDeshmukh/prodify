@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { insforge } from "@/lib/insforge";
+import { insforge, getUserInsforge } from "@/lib/insforge";
 import { updateProfileSchema } from "@/lib/validations";
 
 export async function PATCH(req: NextRequest) {
@@ -23,8 +23,9 @@ export async function PATCH(req: NextRequest) {
     }
 
     const { name, image } = result.data;
+    const userInsforge = getUserInsforge((session as any).accessToken);
 
-    const { data: updatedUser, error } = await insforge.database
+    const { data: updatedUser, error } = await userInsforge.database
       .from('users')
       .update({ ...(name && { name }), ...(image && { image }) })
       .eq('id', session.user.id)

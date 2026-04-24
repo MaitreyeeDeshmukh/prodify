@@ -58,6 +58,9 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (token?.id) session.user.id = token.id as string;
+      if (token?.accessToken) {
+        (session as { accessToken?: string }).accessToken = token.accessToken as string;
+      }
       if (token?.githubAccessToken) {
         (session as { githubAccessToken?: string }).githubAccessToken = token.githubAccessToken as string;
       }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { insforge } from "@/lib/insforge";
+import { insforge, getUserInsforge } from "@/lib/insforge";
 import { logActivity } from "@/lib/activity";
 
 export async function GET() {
@@ -9,7 +9,9 @@ export async function GET() {
   if (!session?.user?.id)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: projects, error } = await insforge.database
+  const userInsforge = getUserInsforge((session as any).accessToken);
+
+  const { data: projects, error } = await userInsforge.database
     .from('projects')
     .select('id, name, description, repoUrl, repoFullName, status, prUrl, branchName, createdAt, updatedAt')
     .eq('userId', session.user.id)
@@ -42,15 +44,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Project name is required" }, { status: 400 });
   }
 
+  const userInsforge = getUserInsforge((session as any).accessToken);
+
   // Ensure user row exists
-  await insforge.database
+  await userInsforge.database
     .from('users')
     .upsert(
       { id: session.user.id, email: session.user.email!, name: session.user.name ?? null, image: session.user.image ?? null },
       { onConflict: 'id' }
     );
 
-  const { data: project, error } = await insforge.database
+  const { data: project, error } = await userInsforge.database
     .from('projects')
     .insert({
       name,

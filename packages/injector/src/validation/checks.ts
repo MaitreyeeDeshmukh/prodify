@@ -678,8 +678,12 @@ export function checkCiTestCommand(tmpDir: string, files: InjectedFile[]): Check
   const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as { scripts?: Record<string, string> };
   const hasTestScript = Boolean(pkg.scripts?.test);
 
-  // If no test script, CI must use --if-present or omit the test step
-  const hasRawTestCommand = /run:\s*(npm|pnpm|yarn|bun)\s+test(?!\s+--if-present)/.test(ciFile.content);
+  // Strip comment lines before checking so commented-out examples don't trigger false positives
+  const nonCommentContent = ciFile.content
+    .split('\n')
+    .filter(line => !line.trim().startsWith('#'))
+    .join('\n');
+  const hasRawTestCommand = /run:\s*(npm|pnpm|yarn|bun)\s+test(?!\s+--if-present)/.test(nonCommentContent);
   if (!hasTestScript && hasRawTestCommand) {
     return {
       id: 'C2-ci-test-command',
@@ -706,7 +710,7 @@ export function checkCiTestCommand(tmpDir: string, files: InjectedFile[]): Check
 // ─────────────────────────────────────────────────────────────────────────────
 
 const REQUIRED_DEPS_FOR_SUPABASE = ['@supabase/ssr', '@supabase/supabase-js', 'stripe'];
-const REQUIRED_DEPS_FOR_INSFORGE = ['stripe'];
+const REQUIRED_DEPS_FOR_INSFORGE = ['stripe', 'next-auth'];
 
 /**
  * Dep1 — All packages referenced in injected files must be in package.json.

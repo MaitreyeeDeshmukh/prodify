@@ -19,3 +19,15 @@ export const insforge =
 if (process.env.NODE_ENV !== 'production') {
   globalForInsforge.insforge = insforge;
 }
+
+export function getUserInsforge(accessToken: string | undefined) {
+  if (!accessToken) return insforge;
+  return createClient({
+    baseUrl: (process.env.INSFORGE_URL ?? process.env.NEXT_PUBLIC_INSFORGE_URL)!,
+    anonKey: process.env.INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY,
+    isServerMode: true,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+}

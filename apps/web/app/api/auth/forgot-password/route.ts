@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         message:
-          "If an account with that email exists, we sent a reset code.",
+          "If an account with that email exists, we sent a password reset link. Click the link in the email to set a new password.",
       },
       { status: 200 }
     );

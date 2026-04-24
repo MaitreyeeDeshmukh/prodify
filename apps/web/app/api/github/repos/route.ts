@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { insforge } from '@/lib/insforge';
+import { insforge, getUserInsforge } from '@/lib/insforge';
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -9,8 +9,10 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const userInsforge = getUserInsforge((session as any).accessToken);
+
   // Get stored GitHub access token
-  const { data: conn } = await insforge.database
+  const { data: conn } = await userInsforge.database
     .from('github_connections')
     .select('access_token, github_login')
     .eq('userId', session.user.id)
@@ -21,7 +23,7 @@ export async function GET() {
   }
 
   const res = await fetch(
-    'https://api.github.com/user/repos?sort=pushed&per_page=100&type=owner',
+    'https://api.github.com/user/repos?sort=updated&per_page=100',
     {
       headers: {
         Authorization: `Bearer ${conn.access_token}`,

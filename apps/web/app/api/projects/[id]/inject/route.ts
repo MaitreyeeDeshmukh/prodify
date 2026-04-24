@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { insforge } from '@/lib/insforge';
+import { insforge, getUserInsforge } from '@/lib/insforge';
 import { logActivity } from '@/lib/activity';
 import os from 'os';
 import path from 'path';
@@ -30,6 +30,47 @@ function detectBackend(analysisResult: Record<string, unknown> | null): 'supabas
   const authProvider = ((stack?.authProvider as string) ?? '').toLowerCase();
   if (dbProvider.includes('supabase') || authProvider.includes('supabase')) return 'supabase';
   return 'insforge';
+}
+
+// ── Monorepo root detection ───────────────────────────────────────────────────
+// In a monorepo (e.g. apps/web/), package.json and next.config.* are NOT at the
+// repo root. We resolve the real Next.js app directory so all file operations land
+// in the right place.
+
+function detectProjectRoot(repoRoot: string): string {
+  const NEXT_CONFIG_NAMES = [
+    'next.config.ts', 'next.config.mjs', 'next.config.js',
+  ];
+
+  // Check common monorepo locations first, then the root itself
+  const candidates = [
+    path.join(repoRoot, 'apps', 'web'),
+    path.join(repoRoot, 'apps', 'app'),
+    path.join(repoRoot, 'web'),
+    path.join(repoRoot, 'app'),
+    repoRoot, // flat repo — root IS the project root
+  ];
+
+  for (const candidate of candidates) {
+    if (!fs.existsSync(candidate)) continue;
+    const hasPkg = fs.existsSync(path.join(candidate, 'package.json'));
+    const hasNextConfig = NEXT_CONFIG_NAMES.some(n => fs.existsSync(path.join(candidate, n)));
+    if (hasPkg && hasNextConfig) return candidate;
+  }
+
+  // Fallback: walk one level deep for any dir with next.config.*
+  try {
+    const entries = fs.readdirSync(repoRoot, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const sub = path.join(repoRoot, entry.name);
+      const hasPkg = fs.existsSync(path.join(sub, 'package.json'));
+      const hasNextConfig = NEXT_CONFIG_NAMES.some(n => fs.existsSync(path.join(sub, n)));
+      if (hasPkg && hasNextConfig) return sub;
+    }
+  } catch { /* ignore */ }
+
+  return repoRoot; // last resort
 }
 
 // ── Protected path detection ──────────────────────────────────────────────────
@@ -77,17 +118,26 @@ function detectProtectedPaths(tmpDir: string): string[] {
 
 function updatePackageJson(tmpDir: string, backend: 'supabase' | 'insforge'): string[] {
   const pkgPath = path.join(tmpDir, 'package.json');
-  if (!fs.existsSync(pkgPath)) return [];
-
-  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as {
+  
+  let pkg: {
+    name?: string;
+    version?: string;
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;
-  };
+  } = { name: 'prodify-app', version: '0.1.0', dependencies: {} };
+
+  if (fs.existsSync(pkgPath)) {
+    try {
+      pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+    } catch {
+      // Ignore parse errors, just overwrite
+    }
+  }
 
   pkg.dependencies = pkg.dependencies ?? {};
   const added: string[] = [];
 
-  const toAdd = backend === 'supabase' ? supabaseRequiredDeps : { stripe: '^17.7.0' };
+  const toAdd = backend === 'supabase' ? supabaseRequiredDeps : { stripe: '^17.7.0', 'next-auth': '^4.24.0' };
 
   for (const [dep, version] of Object.entries(toAdd)) {
     if (!pkg.dependencies[dep] && !pkg.devDependencies?.[dep]) {
@@ -96,7 +146,7 @@ function updatePackageJson(tmpDir: string, backend: 'supabase' | 'insforge'): st
     }
   }
 
-  if (added.length > 0) {
+  if (added.length > 0 || !fs.existsSync(pkgPath)) {
     fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8');
   }
 
@@ -199,10 +249,9 @@ function buildCiFile(tmpDir: string): string {
     'npm run';
 
   // Only include test step if a test script actually exists
-  testCommand = hasTestScript
-    ? `      - run: ${runPrefix === 'npm run' ? 'npm test' : `${runPrefix} test`}`
-    : `      # No test script detected in package.json — add tests and uncomment below
-      # - run: ${runPrefix === 'npm run' ? 'npm test' : `${runPrefix} test`}`;
+  // Always use --if-present so CI never fails on repos without a test script.
+  // Repos that have tests get them run; repos that don't are silently skipped.
+  testCommand = `      - run: ${runPrefix === 'npm run' ? 'npm test --if-present' : `${runPrefix} test --if-present`}`;
 
   const setupStep = pm === 'pnpm'
     ? `      - uses: pnpm/action-setup@v4
@@ -252,7 +301,9 @@ export async function POST(
   const { id } = await params;
   const body = await req.json() as { pricingModel: PricingModel; userType: UserType; openPR: boolean };
 
-  const { data: project } = await insforge.database
+  const userInsforge = getUserInsforge((session as any).accessToken);
+
+  const { data: project } = await userInsforge.database
     .from('projects')
     .select('*')
     .eq('id', id)
@@ -262,7 +313,7 @@ export async function POST(
   if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   if (!project.cloneUrl) return NextResponse.json({ error: 'No repo URL' }, { status: 400 });
 
-  const { data: conn } = await insforge.database
+  const { data: conn } = await userInsforge.database
     .from('github_connections')
     .select('access_token, github_login')
     .eq('userId', session.user.id)
@@ -270,11 +321,12 @@ export async function POST(
 
   const stream = new ReadableStream({
     async start(controller) {
-      const tmpDir = path.join(os.tmpdir(), `prodify-inject-${id}-${Date.now()}`);
+      const repoRoot = path.join(os.tmpdir(), `prodify-inject-${id}-${Date.now()}`);
+      const tmpDir = repoRoot; // will be re-assigned below after clone + root detection
       const branchName = `prodify/inject-${Date.now()}`;
 
       try {
-        await insforge.database.from('projects').update({ status: 'injecting' }).eq('id', id);
+        await userInsforge.database.from('projects').update({ status: 'injecting' }).eq('id', id);
         await logActivity({
           userId: session.user.id,
           projectId: id,
@@ -282,6 +334,7 @@ export async function POST(
           type: 'injection_started',
           message: `Started injecting infrastructure into ${project.repoFullName ?? project.name}`,
           metadata: { pricingModel: body.pricingModel, userType: body.userType },
+          accessToken: (session as any).accessToken,
         });
 
         // Step 1: Clone
@@ -291,12 +344,16 @@ export async function POST(
           cloneUrl = cloneUrl.replace('https://', `https://${conn.access_token}@`);
         }
         const git = simpleGit();
-        await git.clone(cloneUrl, tmpDir, ['--depth=1']);
-        const repoGit = simpleGit(tmpDir);
+        await git.clone(cloneUrl, repoRoot, ['--depth=1']);
+        const projectRoot = detectProjectRoot(repoRoot);
+        const repoGit = simpleGit(repoRoot);
 
         // Step 2: Create branch
         send(controller, 'progress', { step: 2, total: 7, message: `Creating branch ${branchName}...` });
         await repoGit.checkoutLocalBranch(branchName);
+
+        // From this point on, all file operations target the real project root
+        // (handles monorepos where package.json lives in apps/web/ not repo root)
 
         // Step 3: Build injection files
         send(controller, 'progress', { step: 3, total: 7, message: 'Generating infrastructure files...' });
@@ -310,7 +367,7 @@ export async function POST(
         };
 
         // Detect actual protected paths from this repo's route structure
-        const protectedPaths = detectProtectedPaths(tmpDir);
+        const protectedPaths = detectProtectedPaths(projectRoot);
 
         let authFiles, dbFiles, paymentsFiles;
         if (backend === 'supabase') {
@@ -318,12 +375,12 @@ export async function POST(
           dbFiles = buildSupabaseDbFiles(body.userType);
           paymentsFiles = buildSupabasePaymentsFiles();
         } else {
-          authFiles = buildAuthFiles(body.userType);
+          authFiles = buildAuthFiles(body.userType, protectedPaths);
           dbFiles = buildDbFiles(body.userType);
           paymentsFiles = buildPaymentsFiles(body.pricingModel);
         }
 
-        const ciContent = buildCiFile(tmpDir);
+        const ciContent = buildCiFile(projectRoot);
         const allInjectorFiles = [
           ...authFiles,
           ...dbFiles,
@@ -333,44 +390,44 @@ export async function POST(
         ];
 
         // Update package.json with required deps before writing files
-        const addedDeps = updatePackageJson(tmpDir, backend);
+        const addedDeps = updatePackageJson(projectRoot, backend);
 
         // Write .env.example additions
-        updateEnvExample(tmpDir, backend);
+        updateEnvExample(projectRoot, backend);
 
-        // Write all injector files to disk
+        // Write all injector files to disk (rooted at the real project dir)
         for (const file of allInjectorFiles) {
           // Skip the middleware staging file — it gets placed separately below
           if (file.relativePath === 'prodify-layer/__middleware_source__.ts') continue;
-          const fullPath = path.join(tmpDir, file.relativePath);
+          const fullPath = path.join(projectRoot, file.relativePath);
           fs.mkdirSync(path.dirname(fullPath), { recursive: true });
           fs.writeFileSync(fullPath, file.content, 'utf-8');
         }
 
         // Place middleware at project root (not inside prodify-layer/)
-        placeMiddlewareAtRoot(tmpDir, allInjectorFiles);
+        placeMiddlewareAtRoot(projectRoot, allInjectorFiles);
 
         // Step 4: Validate — run all checks before committing anything
         send(controller, 'progress', { step: 4, total: 7, message: 'Validating injected files...' });
 
         // Build the full file list for the validator (include middleware at root)
-        const middlewareContent = fs.existsSync(path.join(tmpDir, 'middleware.ts'))
-          ? fs.readFileSync(path.join(tmpDir, 'middleware.ts'), 'utf-8')
+        const middlewareContent = fs.existsSync(path.join(projectRoot, 'middleware.ts'))
+          ? fs.readFileSync(path.join(projectRoot, 'middleware.ts'), 'utf-8')
           : '';
         const validatorFiles = toInjectedFiles(
           [
             ...allInjectorFiles.filter(f => f.relativePath !== 'prodify-layer/__middleware_source__.ts'),
             ...(middlewareContent ? [{ relativePath: 'middleware.ts', content: middlewareContent }] : []),
           ],
-          tmpDir,
+          projectRoot,
         );
 
-        const validationReport = await runValidation(tmpDir, validatorFiles, backend, true);
+        const validationReport = await runValidation(projectRoot, validatorFiles, backend, true);
 
         if (!validationReport.passed) {
           const reportText = formatReport(validationReport);
           console.error('[inject] validation failed:\n', reportText);
-          await insforge.database.from('projects').update({ status: 'error' }).eq('id', id);
+          await userInsforge.database.from('projects').update({ status: 'error' }).eq('id', id);
           await logActivity({
             userId: session.user.id,
             projectId: id,
@@ -378,6 +435,7 @@ export async function POST(
             type: 'injection_failed',
             message: `Validation failed: ${validationReport.summary}`,
             metadata: { blocks: validationReport.blocks },
+            accessToken: (session as any).accessToken,
           });
           send(controller, 'error', {
             message: `Validation failed — ${validationReport.summary}`,
@@ -488,7 +546,7 @@ Generated by Prodify — https://prodify.dev`,
           send(controller, 'progress', { step: 7, total: 7, message: 'Branch pushed to GitHub.' });
         }
 
-        await insforge.database
+        await userInsforge.database
           .from('projects')
           .update({
             status: 'injected',
@@ -507,23 +565,25 @@ Generated by Prodify — https://prodify.dev`,
             ? `PR opened for ${project.repoFullName ?? project.name}`
             : `Branch ${branchName} pushed to GitHub`,
           metadata: { prUrl, branchName, validationSummary: validationReport.summary },
+          accessToken: (session as any).accessToken,
         });
 
         send(controller, 'done', { prUrl, branchName });
       } catch (err) {
         console.error('[inject] error:', err);
-        await insforge.database.from('projects').update({ status: 'error' }).eq('id', id);
+        await userInsforge.database.from('projects').update({ status: 'error' }).eq('id', id);
         await logActivity({
           userId: session.user.id,
           projectId: id,
           projectName: project.name as string,
           type: 'injection_failed',
           message: `Injection failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          accessToken: (session as any).accessToken,
         });
         send(controller, 'error', { message: err instanceof Error ? err.message : 'Injection failed' });
       } finally {
-        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
-        controller.close();
+        try { fs.rmSync(repoRoot, { recursive: true, force: true }); } catch { /* ignore */ }
+        try { controller.close(); } catch { /* ignore */ }
       }
     },
   });

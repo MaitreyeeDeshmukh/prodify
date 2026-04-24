@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { insforge } from '@/lib/insforge';
+import { insforge, getUserInsforge } from '@/lib/insforge';
 import { randomBytes } from 'crypto';
 
 // GET — list the user's API keys (token value is never returned after creation)
@@ -11,7 +11,9 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { data: keys } = await insforge.database
+  const userInsforge = getUserInsforge((session as any).accessToken);
+
+  const { data: keys } = await userInsforge.database
     .from('api_keys')
     .select('id, name, prefix, createdAt, lastUsedAt')
     .eq('userId', session.user.id)
@@ -27,8 +29,10 @@ export async function POST() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const userInsforge = getUserInsforge((session as any).accessToken);
+
   // Limit to 5 keys per user
-  const { data: existing } = await insforge.database
+  const { data: existing } = await userInsforge.database
     .from('api_keys')
     .select('id')
     .eq('userId', session.user.id);
@@ -43,7 +47,7 @@ export async function POST() {
   const rawToken = `pdfy_${randomBytes(32).toString('hex')}`;
   const prefix = rawToken.slice(0, 12); // e.g. "pdfy_a1b2c3"
 
-  const { data: key, error } = await insforge.database
+  const { data: key, error } = await userInsforge.database
     .from('api_keys')
     .insert({
       userId: session.user.id,

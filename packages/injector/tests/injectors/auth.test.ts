@@ -31,9 +31,9 @@ describe('buildAuthFiles', () => {
     expect(config.content).toContain('SAML');
   });
 
-  it('always returns exactly 2 files', () => {
-    expect(buildAuthFiles('individuals')).toHaveLength(2);
-    expect(buildAuthFiles('teams')).toHaveLength(2);
-    expect(buildAuthFiles('enterprise')).toHaveLength(2);
+  it('always returns exactly 3 files (config, route handler, middleware source)', () => {
+    expect(buildAuthFiles('individuals')).toHaveLength(3);
+    expect(buildAuthFiles('teams')).toHaveLength(3);
+    expect(buildAuthFiles('enterprise')).toHaveLength(3);
   });
 });

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { insforge } from '@/lib/insforge';
+import { insforge, getUserInsforge } from '@/lib/insforge';
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -9,7 +9,9 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { data: conn } = await insforge.database
+  const userInsforge = getUserInsforge((session as any).accessToken);
+
+  const { data: conn } = await userInsforge.database
     .from('github_connections')
     .select('github_login, github_avatar, createdAt')
     .eq('userId', session.user.id)

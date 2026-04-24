@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { insforge } from "@/lib/insforge";
+import { insforge, getUserInsforge } from "@/lib/insforge";
 
 type Params = { params: Promise<{ id: string }> };
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const { data: project, error } = await insforge.database
+  const userInsforge = getUserInsforge((session as any).accessToken);
+
+  const { data: project, error } = await userInsforge.database
     .from('projects')
     .select('*')
     .eq('id', id)
@@ -32,17 +34,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params;
   const body = await req.json() as { name?: string; description?: string };
 
-  const { data: project, error: findError } = await insforge.database
+  const userInsforge = getUserInsforge((session as any).accessToken);
+
+  const { data: project, error: findError } = await userInsforge.database
     .from('projects')
-    .select('*')
+    .select('id, userId')
     .eq('id', id)
-    .eq('userId', session.user.id)
     .single();
 
   if (findError || !project)
     return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const { data: updated, error: updateError } = await insforge.database
+  if (project.userId !== session.user.id)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data: updated, error: updateError } = await userInsforge.database
     .from('projects')
     .update({
       ...(body.name?.trim() && { name: body.name.trim() }),
@@ -67,7 +73,9 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
 
   const { id } = await params;
 
-  const { data: project, error: findError } = await insforge.database
+  const userInsforge = getUserInsforge((session as any).accessToken);
+
+  const { data: project, error: findError } = await userInsforge.database
     .from('projects')
     .select('*')
     .eq('id', id)
@@ -77,7 +85,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (findError || !project)
     return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const { error: deleteError } = await insforge.database
+  const { error: deleteError } = await userInsforge.database
     .from('projects')
     .delete()
     .eq('id', id);

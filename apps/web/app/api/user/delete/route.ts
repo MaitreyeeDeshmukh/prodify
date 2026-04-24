@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { insforge } from '@/lib/insforge';
+import { insforge, getUserInsforge } from '@/lib/insforge';
 
 export async function DELETE() {
   const session = await getServerSession(authOptions);
@@ -10,14 +10,15 @@ export async function DELETE() {
   }
 
   const userId = session.user.id;
+  const userInsforge = getUserInsforge((session as any).accessToken);
 
   // Delete in dependency order
-  await insforge.database.from('api_keys').delete().eq('userId', userId);
-  await insforge.database.from('activity_events').delete().eq('userId', userId);
-  await insforge.database.from('github_connections').delete().eq('userId', userId);
-  await insforge.database.from('projects').delete().eq('userId', userId);
+  await userInsforge.database.from('api_keys').delete().eq('userId', userId);
+  await userInsforge.database.from('activity_events').delete().eq('userId', userId);
+  await userInsforge.database.from('github_connections').delete().eq('userId', userId);
+  await userInsforge.database.from('projects').delete().eq('userId', userId);
 
-  const { error } = await insforge.database
+  const { error } = await userInsforge.database
     .from('users')
     .delete()
     .eq('id', userId);

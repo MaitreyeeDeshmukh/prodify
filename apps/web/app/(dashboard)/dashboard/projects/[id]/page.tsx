@@ -72,6 +72,7 @@ type Project = {
   prUrl: string | null;
   branchName: string | null;
   createdAt: string;
+  analysedAt: string | null;
 };
 
 type ProgressEvent = { step: number; total: number; message: string };
@@ -396,6 +397,22 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-1">
               <h2 className="font-semibold" style={{ color: '#e3f4f8' }}>Analysis report</h2>
+              {/* Timestamp + Re-analyze */}
+              {project.analysedAt && (
+                <span className="text-xs px-2 py-0.5 rounded-full" style={{ color: '#8589b2', background: 'rgba(133,137,178,0.1)', border: '1px solid #1a1b2e' }}>
+                  Analyzed {new Date(project.analysedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+              <button
+                onClick={() => void startAnalysis()}
+                title="Re-analyze repository"
+                className="text-xs px-2.5 py-1 rounded-lg transition-colors ml-1"
+                style={{ color: '#575efe', background: 'rgba(87,94,254,0.08)', border: '1px solid rgba(87,94,254,0.25)' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(87,94,254,0.18)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(87,94,254,0.08)'; }}
+              >
+                ↻ Re-analyze
+              </button>
               <div className="flex items-center gap-1 ml-auto">
                 <button
                   onClick={() => downloadReport('markdown')}
@@ -775,8 +792,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         </div>
       )}
 
-      {/* ANALYZED — report + config form */}
-      {status === 'analyzed' && report && !injecting && (
+      {/* REPORT + CONFIG — shown whenever an analysis exists (any status except actively analyzing/injecting) */}
+      {report !== null && !analyzing && !injecting && (
         <div className="space-y-6">
           {reportContent}
 
@@ -962,7 +979,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               </p>
               <button
                 onClick={() => void startInjection()}
-                disabled={report.conflicts.some(c => c.severity === 'blocker') || authMethods.length === 0}
+                disabled={authMethods.length === 0}
                 className="py-2.5 px-6 rounded-full font-semibold text-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ background: '#575efe', color: '#ffffff', boxShadow: '0 0 20px rgba(87,94,254,0.4)' }}
                 onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 32px rgba(87,94,254,0.6)'; }}
@@ -1010,226 +1027,60 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         </div>
       )}
 
-      {/* INJECTED — tabbed: Status | Analysis Report */}
-      {status === 'injected' && !injecting && (
-        <div className="space-y-6">
-          {/* Tab bar */}
+      {/* INJECTED — success banner + re-inject controls (report shown above via combined block) */}
+      {status === 'injected' && !injecting && !analyzing && (
+        <div className="space-y-4">
+          {/* Success banner */}
           <div
-            className="flex gap-1 p-1 rounded-xl w-fit"
-            style={{ background: 'rgba(27,30,61,0.8)', border: '1px solid #1a1b2e' }}
+            className="rounded-2xl p-6"
+            style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.3)' }}
           >
-            {([
-              { key: 'status', label: '🎉 Injection status' },
-              { key: 'report', label: '🔍 Analysis report' },
-            ] as const).map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => setViewMode(tab.key)}
-                className="px-4 py-1.5 rounded-lg text-sm font-medium transition-all"
-                style={
-                  viewMode === tab.key
-                    ? { background: 'rgba(87,94,254,0.2)', color: '#e3f4f8', border: '1px solid rgba(87,94,254,0.3)' }
-                    : { color: '#8589b2', border: '1px solid transparent' }
-                }
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-2xl">🎉</span>
+              <h2 className="font-semibold" style={{ color: '#10b981' }}>Infrastructure injected successfully</h2>
+            </div>
+            <p className="text-sm mb-4" style={{ color: '#8589b2' }}>
+              Auth, payments, and database infrastructure have been injected and pushed to GitHub.
+            </p>
+            {project.prUrl && (
+              <a
+                href={project.prUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-full transition-all"
+                style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.4)', color: '#10b981', boxShadow: '0 0 12px rgba(16,185,129,0.2)' }}
               >
-                {tab.label}
-              </button>
-            ))}
+                View PR on GitHub →
+              </a>
+            )}
+            {project.branchName && (
+              <p className="text-xs mt-2" style={{ color: '#8589b2' }}>
+                Branch: <code style={{ fontFamily: 'var(--font-geist-mono)', color: '#00d7ff' }}>{project.branchName}</code>
+              </p>
+            )}
           </div>
 
-          {/* Status tab */}
-          {viewMode === 'status' && (
-            <div className="space-y-6">
-              <div
-                className="rounded-2xl p-6"
-                style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.3)' }}
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <span className="text-2xl">🎉</span>
-                  <h2 className="font-semibold" style={{ color: '#10b981' }}>Infrastructure injected successfully</h2>
-                </div>
-                <p className="text-sm mb-4" style={{ color: '#8589b2' }}>
-                  Auth, payments, and database infrastructure have been injected and pushed to GitHub.
-                </p>
-                {project.prUrl && (
-                  <a
-                    href={project.prUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-full transition-all"
-                    style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.4)', color: '#10b981', boxShadow: '0 0 12px rgba(16,185,129,0.2)' }}
-                  >
-                    View PR on GitHub →
-                  </a>
-                )}
-                {project.branchName && (
-                  <p className="text-xs mt-2" style={{ color: '#8589b2' }}>
-                    Branch: <code style={{ fontFamily: 'var(--font-geist-mono)', color: '#00d7ff' }}>{project.branchName}</code>
-                  </p>
-                )}
-              </div>
-
-              <div className="p-6" style={{ background: 'rgba(27,30,61,0.5)', backdropFilter: 'blur(20px)', border: '1px solid #1a1b2e', borderRadius: '1rem' }}>
-                <h3 className="font-semibold mb-4" style={{ color: '#e3f4f8' }}>Next steps</h3>
-                <ol className="space-y-3">
-                  {[
-                    'Review the PR — check every file before merging',
-                    'Add env vars from README-prodify.md to your .env.local',
-                    'Run the SQL schema / migration from prodify-layer/db/schema.sql',
-                    'Merge the PR to main',
-                    'Set up Stripe webhook: stripe listen --forward-to localhost:3000/api/webhooks/stripe',
-                  ].map((text, i) => (
-                    <li key={i} className="flex items-start gap-3 text-sm" style={{ color: '#8589b2' }}>
-                      <span
-                        className="w-5 h-5 rounded shrink-0 mt-0.5 flex items-center justify-center text-xs"
-                        style={{ border: '1px solid #323779', color: '#8589b2' }}
-                      />
-                      {text}
-                    </li>
-                  ))}
-                </ol>
-              </div>
-
-              {/* Re-inject config — shown inline without re-running analysis */}
-              {showReinjecting && (
-                <div className="p-6" style={{ background: 'rgba(27,30,61,0.5)', backdropFilter: 'blur(20px)', border: '1px solid rgba(87,94,254,0.3)', borderRadius: '1rem' }}>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold" style={{ color: '#e3f4f8' }}>Re-inject with new config</h3>
-                    <button
-                      onClick={() => setShowReinjecting(false)}
-                      className="text-sm transition-colors"
-                      style={{ color: '#8589b2' }}
-                    >
-                      ✕ Cancel
-                    </button>
-                  </div>
-                  <p className="text-xs mb-5" style={{ color: '#8589b2' }}>
-                    Uses the existing analysis — no re-scan needed. Creates a new branch on GitHub.
-                  </p>
-                  <div className="space-y-5">
-                    <OptionGroup
-                      label="Pricing model"
-                      options={[
-                        { value: 'flat', label: 'Flat rate', desc: 'Single subscription price' },
-                        { value: 'per-seat', label: 'Per seat', desc: 'Charge per user/seat' },
-                        { value: 'usage', label: 'Usage-based', desc: 'Metered billing' },
-                      ]}
-                      value={pricingModel}
-                      onChange={v => setPricingModel(v as typeof pricingModel)}
-                    />
-                    <OptionGroup
-                      label="User type"
-                      options={[
-                        { value: 'individuals', label: 'Individuals', desc: 'Single-user accounts' },
-                        { value: 'teams', label: 'Teams', desc: 'Orgs + memberships' },
-                        { value: 'enterprise', label: 'Enterprise', desc: 'Teams + SAML SSO' },
-                      ]}
-                      value={userType}
-                      onChange={v => setUserType(v as typeof userType)}
-                    />
-                    <div>
-                      <p className="text-sm font-medium mb-2" style={{ color: '#e3f4f8' }}>After injection</p>
-                      <div className="flex gap-3">
-                        {[
-                          { v: true, label: 'Open a PR to main', desc: 'Recommended — review before merge' },
-                          { v: false, label: 'Push branch only', desc: "You'll open the PR manually" },
-                        ].map(opt => (
-                          <button
-                            key={String(opt.v)}
-                            onClick={() => setOpenPR(opt.v)}
-                            className="flex-1 rounded-xl p-3 text-left transition-all"
-                            style={
-                              openPR === opt.v
-                                ? { border: '1px solid #575efe', background: 'rgba(87,94,254,0.1)' }
-                                : { border: '1px solid #323779', background: 'transparent' }
-                            }
-                          >
-                            <p className="text-sm font-medium" style={{ color: '#e3f4f8' }}>{opt.label}</p>
-                            <p className="text-xs mt-0.5" style={{ color: '#8589b2' }}>{opt.desc}</p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-6 pt-4 flex items-center justify-between" style={{ borderTop: '1px solid #1a1b2e' }}>
-                    <p className="text-xs" style={{ color: '#8589b2' }}>
-                      Branch: <code style={{ fontFamily: 'var(--font-geist-mono)', color: '#00d7ff' }}>prodify/inject-{'<timestamp>'}</code>
-                    </p>
-                    <button
-                      onClick={() => { setShowReinjecting(false); void startInjection(); }}
-                      className="py-2.5 px-6 rounded-full font-semibold text-sm transition-all duration-200"
-                      style={{ background: '#575efe', color: '#ffffff', boxShadow: '0 0 20px rgba(87,94,254,0.4)' }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 32px rgba(87,94,254,0.6)'; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 20px rgba(87,94,254,0.4)'; }}
-                    >
-                      Inject now
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-3 flex-wrap">
-                {!showReinjecting && (
-                  <button
-                    onClick={() => setShowReinjecting(true)}
-                    className="py-2.5 px-5 rounded-full font-semibold text-sm transition-all duration-200"
-                    style={{ background: '#575efe', color: '#ffffff', boxShadow: '0 0 20px rgba(87,94,254,0.4)' }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 32px rgba(87,94,254,0.6)'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 20px rgba(87,94,254,0.4)'; }}
-                  >
-                    Re-inject
-                  </button>
-                )}
-                <button
-                  onClick={() => void startAnalysis()}
-                  className="py-2.5 px-5 rounded-full font-semibold text-sm transition-all"
-                  style={{ border: '1px solid #323779', color: '#e3f4f8', background: 'transparent' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#575efe'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#323779'; }}
-                >
-                  Re-analyze
-                </button>
-                {report && (
-                  <button
-                    onClick={() => setViewMode('report')}
-                    className="py-2.5 px-5 rounded-full font-semibold text-sm transition-all"
-                    style={{ border: '1px solid #323779', color: '#e3f4f8', background: 'transparent' }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#575efe'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#323779'; }}
-                  >
-                    View analysis report
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Analysis report tab */}
-          {viewMode === 'report' && (
-            <div className="space-y-6">
-              {reportContent}
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setViewMode('status')}
-                  className="py-2.5 px-5 rounded-full font-semibold text-sm transition-all"
-                  style={{ border: '1px solid #323779', color: '#e3f4f8', background: 'transparent' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#575efe'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#323779'; }}
-                >
-                  ← Back to status
-                </button>
-                <button
-                  onClick={() => void startAnalysis()}
-                  className="py-2.5 px-5 rounded-full font-semibold text-sm transition-all"
-                  style={{ border: '1px solid #323779', color: '#e3f4f8', background: 'transparent' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#575efe'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#323779'; }}
-                >
-                  Re-analyze
-                </button>
-              </div>
-            </div>
-          )}
+          {/* Next steps */}
+          <div className="p-6" style={{ background: 'rgba(27,30,61,0.5)', backdropFilter: 'blur(20px)', border: '1px solid #1a1b2e', borderRadius: '1rem' }}>
+            <h3 className="font-semibold mb-4" style={{ color: '#e3f4f8' }}>Next steps</h3>
+            <ol className="space-y-3">
+              {[
+                'Review the PR — check every file before merging',
+                'Add env vars from README-prodify.md to your .env.local',
+                'Run the SQL schema / migration from prodify-layer/db/schema.sql',
+                'Merge the PR to main',
+                'Set up Stripe webhook: stripe listen --forward-to localhost:3000/api/webhooks/stripe',
+              ].map((text, i) => (
+                <li key={i} className="flex items-start gap-3 text-sm" style={{ color: '#8589b2' }}>
+                  <span
+                    className="w-5 h-5 rounded shrink-0 mt-0.5 flex items-center justify-center text-xs"
+                    style={{ border: '1px solid #323779', color: '#8589b2' }}
+                  />
+                  {text}
+                </li>
+              ))}
+            </ol>
+          </div>
         </div>
       )}
 

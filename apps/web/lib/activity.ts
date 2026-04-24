@@ -1,4 +1,4 @@
-import { insforge } from './insforge';
+import { insforge, getUserInsforge } from './insforge';
 
 export type ActivityType =
   | 'project_created'
@@ -17,8 +17,10 @@ export async function logActivity(params: {
   type: ActivityType;
   message: string;
   metadata?: Record<string, unknown>;
+  accessToken?: string;
 }) {
-  await insforge.database.from('activity_events').insert({
+  const userInsforge = getUserInsforge(params.accessToken);
+  await userInsforge.database.from('activity_events').insert({
     userId: params.userId,
     projectId: params.projectId ?? null,
     projectName: params.projectName ?? null,

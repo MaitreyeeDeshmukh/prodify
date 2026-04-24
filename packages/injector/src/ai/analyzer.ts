@@ -450,84 +450,132 @@ For focusLayers: include all layers that need DEEP investigation. Include "auth"
 
 // ─── Phase 3: Sonnet — Plan + Safety Check (~2–3¢) ───────────────────────────
 
-async function buildTargetedContext(
-  dir: string,
-  fingerprint: RepoFingerprint,
-  focusLayers: HaikuInsight['focusLayers'],
-): Promise<string> {
-  // Always-include files (small, high signal)
-  const always: Array<{ path: string; maxChars: number }> = [
-    { path: 'package.json', maxChars: 4000 },
-    { path: 'apps/web/package.json', maxChars: 3000 },
-    { path: 'next.config.ts', maxChars: 2000 },
-    { path: 'next.config.js', maxChars: 2000 },
-    { path: 'next.config.mjs', maxChars: 2000 },
-    { path: 'tsconfig.json', maxChars: 1500 },
-    { path: 'app/layout.tsx', maxChars: 2000 },
-    { path: 'src/app/layout.tsx', maxChars: 2000 },
-    { path: 'app/page.tsx', maxChars: 1500 },
-    { path: 'src/app/page.tsx', maxChars: 1500 },
-  ];
+// Priority tiers for the budget-based scanner
+const IGNORE_DIRS = new Set([
+  'node_modules', '.next', '.git', 'dist', '.turbo', '.cache',
+  'coverage', '__pycache__', '.vercel', 'build', 'out', '.output',
+]);
 
-  // Layer-specific files — only loaded when that layer is in focusLayers
-  const layerFiles: Record<string, Array<{ path: string; maxChars: number }>> = {
-    auth: [
-      { path: 'lib/auth.ts', maxChars: 4000 },
-      { path: 'lib/auth.js', maxChars: 4000 },
-      { path: 'src/lib/auth.ts', maxChars: 4000 },
-      { path: 'app/api/auth/[...nextauth]/route.ts', maxChars: 4000 },
-      { path: 'pages/api/auth/[...nextauth].ts', maxChars: 4000 },
-      { path: 'middleware.ts', maxChars: 3000 },
-      { path: 'middleware.js', maxChars: 3000 },
-    ],
-    payments: [
-      { path: 'lib/stripe.ts', maxChars: 4000 },
-      { path: 'lib/stripe.js', maxChars: 4000 },
-      { path: 'lib/payments.ts', maxChars: 4000 },
-      { path: 'app/api/webhooks/stripe/route.ts', maxChars: 4000 },
-      { path: 'app/api/checkout/route.ts', maxChars: 3000 },
-      { path: 'pages/api/webhooks/stripe.ts', maxChars: 4000 },
-      { path: 'pages/api/checkout.ts', maxChars: 3000 },
-    ],
-    database: [
-      { path: 'prisma/schema.prisma', maxChars: 5000 },
-      { path: 'db/schema.ts', maxChars: 5000 },
-      { path: 'src/db/schema.ts', maxChars: 5000 },
-      { path: 'drizzle.config.ts', maxChars: 2000 },
-      { path: 'lib/db.ts', maxChars: 3000 },
-      { path: 'lib/db.js', maxChars: 3000 },
-      { path: 'lib/prisma.ts', maxChars: 2000 },
-      { path: 'lib/supabase.ts', maxChars: 3000 },
-      { path: 'src/lib/db.ts', maxChars: 3000 },
-    ],
-    ci: [
-      { path: '.github/workflows/ci.yml', maxChars: 2000 },
-      { path: '.github/workflows/main.yml', maxChars: 2000 },
-      { path: '.env.example', maxChars: 3000 },
-      { path: '.env.local.example', maxChars: 3000 },
-    ],
-  };
+const SOURCE_EXTENSIONS = new Set([
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.sql', '.prisma', '.yml', '.yaml',
+]);
 
-  const targets = [...always];
-  for (const layer of focusLayers) {
-    if (layerFiles[layer]) targets.push(...layerFiles[layer]);
+interface ScoredFile {
+  absPath: string;
+  relPath: string;
+  priority: number; // lower = higher priority
+  size: number;
+}
+
+// Assign priority rank to a relative file path so important files are read first
+function scorePath(relPath: string): number {
+  const p = relPath.replace(/\\/g, '/').toLowerCase();
+
+  // Tier 0 — config anchors (always read first)
+  if (p === 'package.json' || p.endsWith('/package.json')) return 0;
+  if (p.startsWith('next.config') || p.startsWith('tsconfig')) return 1;
+  if (p === '.env.example' || p === '.env.local.example') return 2;
+
+  // Tier 1 — auth / middleware (highest-signal SaaS files)
+  if (p === 'middleware.ts' || p === 'middleware.js') return 10;
+  if (p.includes('auth') && !p.includes('node_modules')) return 11;
+  if (p.includes('signin') || p.includes('login') || p.includes('signup')) return 12;
+  if (p.includes('session') || p.includes('user') || p.includes('profile')) return 13;
+
+  // Tier 2 — payments
+  if (p.includes('stripe') || p.includes('payment') || p.includes('checkout') || p.includes('webhook')) return 20;
+  if (p.includes('subscription') || p.includes('billing') || p.includes('plan')) return 21;
+
+  // Tier 3 — database / schema
+  if (p.endsWith('.prisma') || p.endsWith('schema.sql') || p.endsWith('supabase.sql')) return 30;
+  if (p.includes('schema') || p.includes('/db/') || p.includes('drizzle')) return 31;
+  if (p.includes('migrat')) return 32;
+
+  // Tier 4 — API routes (all of them)
+  if (p.includes('/api/') || p.includes('route.ts') || p.includes('route.js')) return 40;
+
+  // Tier 5 — lib / utils
+  if (p.includes('/lib/') || p.includes('/utils/') || p.includes('/helpers/')) return 50;
+
+  // Tier 6 — layout and root pages
+  if (p.match(/\/(layout|page)\.(tsx|jsx|ts|js)$/)) return 60;
+
+  // Tier 7 — CI
+  if (p.includes('.github/') || p.includes('workflows/')) return 70;
+
+  // Tier 8 — everything else
+  return 80;
+}
+
+// Walk the entire repo and collect all source files, sorted by priority
+async function collectScoredFiles(dir: string): Promise<ScoredFile[]> {
+  const results: ScoredFile[] = [];
+
+  async function walk(current: string): Promise<void> {
+    let entries: fs.Dirent[];
+    try { entries = await fs.readdir(current, { withFileTypes: true }); } catch { return; }
+
+    for (const entry of entries) {
+      if (IGNORE_DIRS.has(entry.name) || entry.name.startsWith('.DS_Store')) continue;
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        await walk(fullPath);
+      } else {
+        const ext = path.extname(entry.name).toLowerCase();
+        if (!SOURCE_EXTENSIONS.has(ext)) continue;
+        const relPath = path.relative(dir, fullPath).replace(/\\/g, '/');
+        let size = 0;
+        try { size = (await fs.stat(fullPath)).size; } catch { /* ignore */ }
+        results.push({ absPath: fullPath, relPath, priority: scorePath(relPath), size });
+      }
+    }
   }
 
-  // De-dupe paths
-  const seen = new Set<string>();
-  const unique = targets.filter(t => {
-    if (seen.has(t.path)) return false;
-    seen.add(t.path);
-    return true;
-  });
+  await walk(dir);
+  // Sort: primary by priority tier, secondary by file size ascending (smaller = more files fit)
+  results.sort((a, b) => a.priority - b.priority || a.size - b.size);
+  return results;
+}
+
+/**
+ * Budget-based context builder — replaces the old hardcoded file list.
+ *
+ * Walks the ENTIRE repo, ranks every source file by how relevant it is
+ * (auth > payments > db > api routes > lib > pages > ci > other), then
+ * greedily reads files until the total char budget is exhausted.
+ *
+ * This means auth-context.tsx, supabase.sql, or any file with a
+ * non-standard name/location will be found automatically without needing
+ * a hardcoded entry. The detailed Sonnet output schema is unchanged.
+ */
+async function buildBudgetedContext(
+  dir: string,
+  _fingerprint: RepoFingerprint,
+  _focusLayers: HaikuInsight['focusLayers'],
+  totalBudget = 28_000, // chars — leaves room for the rest of the prompt
+  perFileCap = 4_000,   // max chars per individual file
+): Promise<string> {
+  const scoredFiles = await collectScoredFiles(dir);
 
   const parts: string[] = [];
-  for (const t of unique) {
-    const content = await readFileSafe(path.join(dir, t.path), t.maxChars);
-    if (content) parts.push(`\n=== ${t.path} ===\n${content}`);
+  let budgetUsed = 0;
+
+  for (const file of scoredFiles) {
+    if (budgetUsed >= totalBudget) break;
+    const remaining = totalBudget - budgetUsed;
+    const cap = Math.min(perFileCap, remaining);
+    const content = await readFileSafe(file.absPath, cap);
+    if (!content) continue;
+    const block = `\n=== ${file.relPath} ===\n${content}`;
+    parts.push(block);
+    budgetUsed += block.length;
   }
+
   return parts.join('\n');
 }
+
+// Alias so runSonnetPhase call below needs no change
+const buildTargetedContext = buildBudgetedContext;
 
 // ─── Phase 3: Sonnet analysis ─────────────────────────────────────────────────
 

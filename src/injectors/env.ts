@@ -1,45 +1,139 @@
 // ─── ENV Injector ─────────────────────────────────────────────────────────────
 // Generates a .env.example with all required keys, labeled by service.
+// Keys are conditional on pricing model, billing interval, and onboarding flow.
 import type { FileEntry, ProdifyAnswers } from '../types';
 
 export function buildEnvFile(answers: ProdifyAnswers): FileEntry[] {
-  const samlBlock =
-    answers.userType === 'enterprise'
-      ? `
+  const {
+    appName,
+    pricingModel,
+    billingInterval,
+    onboardingFlow,
+    userType,
+    deployTarget,
+    complianceRegion,
+  } = answers;
+
+  // ── Stripe price ID block ──────────────────────────────────────────────────
+  let stripePriceBlock: string;
+  if (pricingModel === 'credits') {
+    stripePriceBlock = `
+# ── Stripe Credit Pack Price IDs ──────────────────────────────────────────────
+# Create 3 one-time prices in your Stripe dashboard and paste the IDs below.
+STRIPE_CREDITS_STARTER_PRICE_ID=price_  # 100 credits
+STRIPE_CREDITS_GROWTH_PRICE_ID=price_   # 500 credits
+STRIPE_CREDITS_SCALE_PRICE_ID=price_    # 2,000 credits`;
+  } else if (pricingModel === 'one-time') {
+    stripePriceBlock = `
+# ── Stripe One-Time Price ID ──────────────────────────────────────────────────
+STRIPE_ONE_TIME_PRICE_ID=price_         # Create a one_time price in your Stripe dashboard`;
+  } else if (pricingModel === 'hybrid') {
+    stripePriceBlock = `
+# ── Stripe Price IDs (Hybrid: base + overage) ─────────────────────────────────
+# Create 2 prices in your Stripe dashboard and paste the IDs below.
+STRIPE_MONTHLY_PRICE_ID=price_          # Flat recurring base subscription
+STRIPE_OVERAGE_PRICE_ID=price_          # Metered price (aggregate_usage: sum)`;
+  } else if (billingInterval === 'annual') {
+    stripePriceBlock = `
+# ── Stripe Price IDs (Monthly + Annual) ──────────────────────────────────────
+# Create 2 prices in your Stripe dashboard and paste the IDs below.
+# Annual is typically 15–20% discounted. Both use the same product.
+STRIPE_MONTHLY_PRICE_ID=price_          # dashboard.stripe.com → Products → Add price → Recurring monthly
+STRIPE_ANNUAL_PRICE_ID=price_           # dashboard.stripe.com → same product → Add price → Recurring yearly`;
+  } else {
+    stripePriceBlock = `
+# ── Stripe Price ID ───────────────────────────────────────────────────────────
+STRIPE_MONTHLY_PRICE_ID=price_          # dashboard.stripe.com → Products → Add price → Recurring`;
+  }
+
+  // ── Trial env key ──────────────────────────────────────────────────────────
+  const trialBlock = (onboardingFlow === 'trial-card' || onboardingFlow === 'trial-no-card')
+    ? `\nSTRIPE_FREE_TRIAL_DAYS=14              # Number of free trial days`
+    : '';
+
+  // ── SAML block ─────────────────────────────────────────────────────────────
+  const samlBlock = userType === 'enterprise'
+    ? `
 # ── SAML / Enterprise SSO ─────────────────────────────────────────────────────
-SAML_AUTHORIZATION_URL=        # Your IdP authorization endpoint
-SAML_TOKEN_URL=                # Your IdP token endpoint
-SAML_USERINFO_URL=             # Your IdP userinfo endpoint
-SAML_CLIENT_ID=                # Client ID from your IdP
-SAML_CLIENT_SECRET=            # Client secret from your IdP
-`
-      : '';
+# Recommended provider: BoxyHQ (https://boxyhq.com/docs/jackson/deploy)
+SAML_AUTHORIZATION_URL=                # Your IdP authorization endpoint
+SAML_TOKEN_URL=                        # Your IdP token endpoint
+SAML_USERINFO_URL=                     # Your IdP userinfo endpoint
+SAML_CLIENT_ID=                        # Client ID from your IdP
+SAML_CLIENT_SECRET=                    # Client secret from your IdP`
+    : '';
+
+  // ── Deploy target CI secrets ───────────────────────────────────────────────
+  const deployBlock =
+    deployTarget === 'vercel'  ? `
+# ── Vercel Deployment ─────────────────────────────────────────────────────────
+# Add these to your GitHub repository secrets (Settings → Secrets → Actions).
+VERCEL_TOKEN=                          # vercel.com → Settings → Tokens
+VERCEL_ORG_ID=                         # Run: vercel link — shows in .vercel/project.json
+VERCEL_PROJECT_ID=                     # Run: vercel link — shows in .vercel/project.json`
+    : deployTarget === 'railway' ? `
+# ── Railway Deployment ────────────────────────────────────────────────────────
+RAILWAY_TOKEN=                         # railway.app → Project → Settings → Tokens`
+    : deployTarget === 'fly'     ? `
+# ── Fly.io Deployment ─────────────────────────────────────────────────────────
+FLY_API_TOKEN=                         # fly.io → Account → Access Tokens → Create token`
+    : deployTarget === 'aws'     ? `
+# ── AWS Deployment ────────────────────────────────────────────────────────────
+AWS_ACCESS_KEY_ID=                     # IAM user with Lightsail or App Runner permissions
+AWS_SECRET_ACCESS_KEY=
+AWS_REGION=us-east-1`
+    : '';
+
+  // ── GDPR/compliance ────────────────────────────────────────────────────────
+  const gdprBlock = complianceRegion === 'eu-gdpr'
+    ? `
+# ── GDPR / Cookie Consent ────────────────────────────────────────────────────
+NEXT_PUBLIC_COOKIE_CONSENT_ENABLED=true`
+    : '';
 
   const content = `# ─── Generated by Prodify ────────────────────────────────────────────────────
+# App: ${appName}
 # Copy this file to .env.local and fill in all values before running.
 # Never commit .env.local to git.
+#
+# ⚠️  TRUST NOTE: Prodify never sees these values. We injected the code.
+# You paste your own keys. Your Stripe account handles all payments.
+# Your customers' payment data never flows through Prodify.
+
+# ── App ────────────────────────────────────────────────────────────────────────
+APP_NAME="${appName}"
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# ── InsForge (BaaS) ───────────────────────────────────────────────────────────
+INSFORGE_URL=                          # Your InsForge project URL
+INSFORGE_ANON_KEY=                     # Your InsForge anon key
 
 # ── Database ──────────────────────────────────────────────────────────────────
 DATABASE_URL=postgresql://user:password@localhost:5432/mydb
 
 # ── NextAuth.js ───────────────────────────────────────────────────────────────
 NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=               # Run: openssl rand -base64 32
+NEXTAUTH_SECRET=                       # Run: openssl rand -base64 32
 
 # ── OAuth Providers ───────────────────────────────────────────────────────────
-GOOGLE_CLIENT_ID=              # console.cloud.google.com → Credentials
+GOOGLE_CLIENT_ID=                      # console.cloud.google.com → Credentials
 GOOGLE_CLIENT_SECRET=
-GITHUB_CLIENT_ID=              # github.com → Settings → Developer settings
+GITHUB_CLIENT_ID=                      # github.com → Settings → Developer settings
 GITHUB_CLIENT_SECRET=
 ${samlBlock}
-# ── Stripe ────────────────────────────────────────────────────────────────────
-STRIPE_SECRET_KEY=sk_test_     # dashboard.stripe.com → Developers → API keys
-STRIPE_PUBLISHABLE_KEY=pk_test_
-STRIPE_WEBHOOK_SECRET=whsec_   # stripe listen --forward-to localhost:3000/api/webhooks/stripe
-STRIPE_PRICE_ID=price_         # The price ID for your subscription plan
 
-# ── App ────────────────────────────────────────────────────────────────────────
-NEXT_PUBLIC_APP_URL=http://localhost:3000
+# ── Stripe ────────────────────────────────────────────────────────────────────
+STRIPE_SECRET_KEY=sk_test_             # dashboard.stripe.com → Developers → API keys
+STRIPE_PUBLISHABLE_KEY=pk_test_
+STRIPE_WEBHOOK_SECRET=whsec_           # stripe listen --forward-to localhost:3000/api/webhooks/stripe
+${stripePriceBlock}
+${trialBlock}
+
+# ── Resend (transactional email) ───────────────────────────────────────────────
+RESEND_API_KEY=re_                     # resend.com → API Keys → Create API key
+FROM_EMAIL=hello@${appName.toLowerCase().replace(/\s+/g, '')}.com
+${deployBlock}
+${gdprBlock}
 `;
 
   return [{ relativePath: '.env.example', content }];

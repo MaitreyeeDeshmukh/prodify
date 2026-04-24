@@ -117,6 +117,9 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   // View mode — lets user flip between injection status and analysis report
   const [viewMode, setViewMode] = useState<'status' | 'report'>('status');
 
+  // Re-inject without re-analysis
+  const [showReinjecting, setShowReinjecting] = useState(false);
+
   const fetchProject = useCallback(async () => {
     const res = await fetch(`/api/projects/${id}`);
     if (!res.ok) { router.push('/dashboard'); return; }
@@ -856,7 +859,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                   {[
                     'Review the PR — check every file before merging',
                     'Add env vars from README-prodify.md to your .env.local',
-                    'Run the InsForge SQL schema from prodify-layer/db/schema.sql',
+                    'Run the SQL schema / migration from prodify-layer/db/schema.sql',
                     'Merge the PR to main',
                     'Set up Stripe webhook: stripe listen --forward-to localhost:3000/api/webhooks/stripe',
                   ].map((text, i) => (
@@ -868,7 +871,88 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 </ol>
               </div>
 
-              <div className="flex gap-3">
+              {/* Re-inject config — shown inline without re-running analysis */}
+              {showReinjecting && (
+                <div className="bg-white rounded-2xl border border-violet-200 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-gray-900">Re-inject with new config</h3>
+                    <button
+                      onClick={() => setShowReinjecting(false)}
+                      className="text-gray-400 hover:text-gray-600 text-sm"
+                    >
+                      ✕ Cancel
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-5">
+                    Uses the existing analysis — no re-scan needed. Creates a new branch on GitHub.
+                  </p>
+                  <div className="space-y-5">
+                    <OptionGroup
+                      label="Pricing model"
+                      options={[
+                        { value: 'flat', label: 'Flat rate', desc: 'Single subscription price' },
+                        { value: 'per-seat', label: 'Per seat', desc: 'Charge per user/seat' },
+                        { value: 'usage', label: 'Usage-based', desc: 'Metered billing' },
+                      ]}
+                      value={pricingModel}
+                      onChange={v => setPricingModel(v as typeof pricingModel)}
+                    />
+                    <OptionGroup
+                      label="User type"
+                      options={[
+                        { value: 'individuals', label: 'Individuals', desc: 'Single-user accounts' },
+                        { value: 'teams', label: 'Teams', desc: 'Orgs + memberships' },
+                        { value: 'enterprise', label: 'Enterprise', desc: 'Teams + SAML SSO' },
+                      ]}
+                      value={userType}
+                      onChange={v => setUserType(v as typeof userType)}
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700 mb-2">After injection</p>
+                      <div className="flex gap-3">
+                        {[
+                          { v: true, label: 'Open a PR to main', desc: 'Recommended — review before merge' },
+                          { v: false, label: 'Push branch only', desc: "You'll open the PR manually" },
+                        ].map(opt => (
+                          <button
+                            key={String(opt.v)}
+                            onClick={() => setOpenPR(opt.v)}
+                            className={`flex-1 rounded-xl border p-3 text-left transition-all ${
+                              openPR === opt.v
+                                ? 'border-violet-500 bg-violet-50'
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            <p className="text-sm font-medium text-gray-900">{opt.label}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
+                    <p className="text-xs text-gray-400">
+                      Branch: <code className="font-mono">prodify/inject-{'<timestamp>'}</code>
+                    </p>
+                    <Button
+                      onClick={() => { setShowReinjecting(false); void startInjection(); }}
+                      className="bg-violet-600 hover:bg-violet-700 text-white"
+                    >
+                      Inject now
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-3 flex-wrap">
+                {!showReinjecting && (
+                  <Button
+                    onClick={() => setShowReinjecting(true)}
+                    className="bg-violet-600 hover:bg-violet-700 text-white"
+                  >
+                    Re-inject
+                  </Button>
+                )}
                 <Button variant="outline" onClick={() => void startAnalysis()}>
                   Re-analyze
                 </Button>

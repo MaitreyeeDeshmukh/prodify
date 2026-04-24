@@ -10,7 +10,7 @@ const bedrock = new BedrockRuntimeClient({
   } : undefined,
 });
 
-const MODEL_ID = process.env.AWS_BEDROCK_MODEL_ID || 'anthropic.claude-3-5-sonnet-20240620-v1:0';
+const MODEL_ID = process.env.AWS_BEDROCK_MODEL_ID || 'anthropic.claude-3-5-sonnet-20241022-v2:0';
 
 export interface InjectionOpportunity {
   layer: 'auth' | 'payments' | 'database' | 'ci' | 'env';

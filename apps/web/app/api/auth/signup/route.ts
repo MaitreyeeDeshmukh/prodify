@@ -26,9 +26,10 @@ export async function POST(req: NextRequest) {
     if (error) {
       // Map InsForge error codes to user-friendly messages
       const msg = error.message ?? "Something went wrong";
+      const rawStatus = (error as { statusCode?: number }).statusCode;
       const status =
-        typeof (error as { statusCode?: number }).statusCode === "number"
-          ? (error as { statusCode?: number }).statusCode!
+        typeof rawStatus === "number" && rawStatus >= 200 && rawStatus <= 599
+          ? rawStatus
           : 400;
       return NextResponse.json({ error: msg }, { status });
     }

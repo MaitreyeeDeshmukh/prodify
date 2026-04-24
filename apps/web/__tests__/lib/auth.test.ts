@@ -19,8 +19,9 @@ async function authorize(
     password: credentials.password,
   });
   if (error || !data?.user) return null;
-  const u = data.user;
-  return { id: u.id, email: u.email, name: u.name ?? null, image: u.image ?? null };
+  const u = data.user as { id: string; email: string; name?: string | null; image?: string | null; profile?: { name?: string | null } | null };
+  const name = u.name ?? u.profile?.name ?? null;
+  return { id: u.id, email: u.email, name, image: u.image ?? null };
 }
 
 describe('authorize', () => {

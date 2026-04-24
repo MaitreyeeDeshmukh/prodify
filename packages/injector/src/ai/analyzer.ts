@@ -1,15 +1,126 @@
+import crypto from 'crypto';
 import fs from 'fs-extra';
 import path from 'path';
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 
-// Initialize Bedrock client
-// Note: Requires AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION
 const bedrock = new BedrockRuntimeClient({
   region: process.env.AWS_REGION || 'us-east-1',
+  credentials: process.env.AWS_ACCESS_KEY_ID ? {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+  } : undefined,
 });
 
-const MODEL_ID = process.env.AWS_BEDROCK_MODEL_ID || 'anthropic.claude-3-5-sonnet-20240620-v1:0';
+const SONNET_MODEL_ID = process.env.AWS_BEDROCK_MODEL_ID || 'us.anthropic.claude-sonnet-4-5-20250929-v1:0';
+const HAIKU_MODEL_ID = process.env.AWS_BEDROCK_HAIKU_MODEL_ID || 'us.anthropic.claude-3-5-haiku-20241022-v1:0';
 
+// ─── Public interfaces ────────────────────────────────────────────────────────
+
+export interface InjectionOpportunity {
+  layer: 'auth' | 'payments' | 'database' | 'ci' | 'env';
+  canInject: boolean;
+  currentState: string;
+  proposed: string;
+  filesToCreate: string[];
+  effort: 'low' | 'medium' | 'high';
+  gaps: string[];
+  implementation: string;
+  envVarsNeeded: string[];
+}
+
+export interface ConflictWarning {
+  description: string;
+  severity: 'warning' | 'blocker';
+  resolution: string;
+  affectedFiles: string[];
+}
+
+export interface CodeInsight {
+  category: 'auth' | 'payments' | 'database' | 'architecture' | 'security' | 'performance';
+  finding: string;
+  evidence: string;
+  recommendation: string;
+}
+
+export interface AnalysisReport {
+  detectedStack: {
+    framework: string;
+    frameworkVersion: string;
+    language: 'typescript' | 'javascript' | 'unknown';
+    nodeVersion: string | null;
+    hasAuth: boolean;
+    authProvider: string | null;
+    authDetails: string | null;
+    hasPayments: boolean;
+    paymentsProvider: string | null;
+    paymentsDetails: string | null;
+    hasDatabase: boolean;
+    dbProvider: string | null;
+    dbDetails: string | null;
+    hasCI: boolean;
+    ciDetails: string | null;
+    otherDependencies: string[];
+  };
+  pattern: 'crud' | 'dashboard' | 'landing' | 'ai-app' | 'ecommerce' | 'generic';
+  appDescription: string;
+  apiRoutes: string[];
+  codeInsights: CodeInsight[];
+  injectionOpportunities: InjectionOpportunity[];
+  conflicts: ConflictWarning[];
+  summary: string;
+  monetizationReadiness: {
+    score: number;
+    blockers: string[];
+    quickWins: string[];
+  };
+}
+
+// Phase 1 output — computed for free, used for caching + scoping AI calls
+export interface RepoFingerprint {
+  packageJsonHash: string;
+  framework: string;
+  frameworkVersion: string;
+  language: 'typescript' | 'javascript' | 'unknown';
+  nodeVersion: string | null;
+  deps: {
+    hasNextAuth: boolean;
+    hasClerk: boolean;
+    hasBetterAuth: boolean;
+    hasStripe: boolean;
+    hasLemonSqueezy: boolean;
+    hasPrisma: boolean;
+    hasDrizzle: boolean;
+    hasSupabase: boolean;
+    hasMongoose: boolean;
+    hasTrpc: boolean;
+    hasTailwind: boolean;
+    hasShadcn: boolean;
+    hasZod: boolean;
+    other: string[];
+  };
+  files: {
+    hasMiddleware: boolean;
+    hasPrismaSchema: boolean;
+    hasStripeWebhook: boolean;
+    hasStripeCheckout: boolean;
+    hasAuthConfig: boolean;
+    hasEnvExample: boolean;
+    hasCI: boolean;
+  };
+  partialImpls: string[];
+  fileCount: number;
+  compactTree: string;
+}
+
+// Phase 2 Haiku output — guides which files Phase 3 reads
+interface HaikuInsight {
+  appDescription: string;
+  pattern: 'crud' | 'dashboard' | 'landing' | 'ai-app' | 'ecommerce' | 'generic';
+  userContext: string;
+  focusLayers: Array<'auth' | 'payments' | 'database' | 'ci'>;
+}
+
+// Legacy type kept for backwards compat
 export interface RetrofitPlan {
   pattern: 'crud' | 'dashboard' | 'generic';
   modifications: Array<{
@@ -19,84 +130,604 @@ export interface RetrofitPlan {
   }>;
 }
 
-export async function analyzeRepository(targetDir: string): Promise<RetrofitPlan> {
-  const packageJsonPath = path.join(targetDir, 'package.json');
-  const appDirPath = path.join(targetDir, 'apps/web/app'); 
-  
-  let packageJson = '';
-  try {
-    packageJson = await fs.readFile(packageJsonPath, 'utf-8');
-  } catch (e) {
-    console.warn('Could not read package.json');
-  }
+// ─── File utilities ───────────────────────────────────────────────────────────
 
-  let tree = '';
-  try {
-    if (await fs.pathExists(appDirPath)) {
-      const files = await fs.readdir(appDirPath, { recursive: true });
-      tree = files.slice(0, 50).join('\n'); 
-    }
-  } catch (e) {
-    console.warn('Could not read app directory');
-  }
-
-  const prompt = `
-You are an expert Next.js developer analyzing a codebase to retrofit it with SaaS infrastructure (auth, payments, DB).
-Analyze the following project structure and package.json to generate a Retrofit Plan.
-
-Project package.json:
-${packageJson.slice(0, 1000)}
-
-App Directory Structure:
-${tree}
-
-Output ONLY valid JSON matching this TypeScript interface:
-{
-  "pattern": "crud" | "dashboard" | "generic",
-  "modifications": [
-    {
-      "file": "path/to/file",
-      "action": "inject_auth" | "inject_stripe" | "inject_db",
-      "description": "What needs to be done"
-    }
-  ]
+async function readFileSafe(p: string, maxChars = 3000): Promise<string> {
+  try { return (await fs.readFile(p, 'utf-8')).slice(0, maxChars); } catch { return ''; }
 }
-`;
 
-  const payload = {
-    anthropic_version: "bedrock-2023-05-31",
-    max_tokens: 1000,
-    messages: [
-      {
-        role: "user",
-        content: prompt
+async function buildFileTree(dir: string): Promise<string> {
+  const IGNORE = new Set(['node_modules', '.next', '.git', 'dist', '.turbo', '.cache', 'coverage', '__pycache__', '.vercel']);
+
+  async function walk(current: string, prefix = '', depth = 0): Promise<string[]> {
+    if (depth > 8) return [];
+    let entries: fs.Dirent[];
+    try { entries = await fs.readdir(current, { withFileTypes: true }); } catch { return []; }
+
+    const filtered = entries
+      .filter(e => !IGNORE.has(e.name) && !e.name.startsWith('.DS_Store'))
+      .sort((a, b) => {
+        if (a.isDirectory() && !b.isDirectory()) return -1;
+        if (!a.isDirectory() && b.isDirectory()) return 1;
+        return a.name.localeCompare(b.name);
+      });
+
+    const lines: string[] = [];
+    for (let i = 0; i < filtered.length; i++) {
+      const entry = filtered[i];
+      const isLast = i === filtered.length - 1;
+      const connector = isLast ? '└── ' : '├── ';
+      const childPrefix = isLast ? '    ' : '│   ';
+      lines.push(`${prefix}${connector}${entry.name}${entry.isDirectory() ? '/' : ''}`);
+      if (entry.isDirectory()) {
+        const children = await walk(path.join(current, entry.name), prefix + childPrefix, depth + 1);
+        lines.push(...children);
       }
-    ]
+    }
+    return lines;
+  }
+
+  const lines = await walk(dir);
+  return lines.join('\n');
+}
+
+async function discoverAndReadApiRoutes(dir: string): Promise<{ paths: string[]; content: string }> {
+  const apiDirs = [
+    path.join(dir, 'app', 'api'),
+    path.join(dir, 'src', 'app', 'api'),
+    path.join(dir, 'pages', 'api'),
+    path.join(dir, 'src', 'pages', 'api'),
+  ];
+
+  const paths: string[] = [];
+  const contentParts: string[] = [];
+
+  for (const apiDir of apiDirs) {
+    if (!await fs.pathExists(apiDir)) continue;
+
+    async function collectRoutes(d: string): Promise<void> {
+      const entries = await fs.readdir(d, { withFileTypes: true }).catch(() => [] as fs.Dirent[]);
+      for (const entry of entries) {
+        const fullPath = path.join(d, entry.name);
+        if (entry.isDirectory()) {
+          await collectRoutes(fullPath);
+        } else if (/\.(ts|js|tsx|jsx)$/.test(entry.name)) {
+          const rel = path.relative(dir, fullPath);
+          paths.push(rel);
+          const content = await readFileSafe(fullPath, 500);
+          if (content) contentParts.push(`\n--- ${rel} ---\n${content}`);
+        }
+      }
+    }
+    await collectRoutes(apiDir);
+  }
+
+  return { paths, content: contentParts.join('\n') };
+}
+
+// ─── Phase 1: Programmatic scanner (~50ms, free) ─────────────────────────────
+
+export async function scanRepository(dir: string): Promise<RepoFingerprint> {
+  const pkgContent = await readFileSafe(path.join(dir, 'package.json'), 20000);
+  const packageJsonHash = crypto.createHash('sha256').update(pkgContent || '').digest('hex');
+
+  let pkg: Record<string, unknown> = {};
+  try { pkg = JSON.parse(pkgContent || '{}') as Record<string, unknown>; } catch { /* ignore */ }
+
+  const allDeps = {
+    ...((pkg.dependencies ?? {}) as Record<string, string>),
+    ...((pkg.devDependencies ?? {}) as Record<string, string>),
   };
 
-  try {
-    const command = new InvokeModelCommand({
-      modelId: MODEL_ID,
-      contentType: 'application/json',
-      accept: 'application/json',
-      body: JSON.stringify(payload),
-    });
+  // Framework detection
+  let framework = 'unknown';
+  let frameworkVersion = 'unknown';
+  if (allDeps['next']) { framework = 'Next.js'; frameworkVersion = allDeps['next']; }
+  else if (allDeps['nuxt']) { framework = 'Nuxt'; frameworkVersion = allDeps['nuxt']; }
+  else if (allDeps['@sveltejs/kit']) { framework = 'SvelteKit'; frameworkVersion = allDeps['@sveltejs/kit']; }
+  else if (allDeps['remix']) { framework = 'Remix'; frameworkVersion = allDeps['remix']; }
+  else if (allDeps['react']) { framework = 'React'; frameworkVersion = allDeps['react']; }
 
-    const response = await bedrock.send(command);
-    const result = JSON.parse(new TextDecoder().decode(response.body));
-    
-    // Anthropic response format on Bedrock
-    const content = result.content[0].text;
-    if (!content) throw new Error('No content returned from AI');
-    
-    // Strip any markdown code blocks if the model included them
-    const jsonStr = content.replace(/```json\n?|\n?```/g, '').trim();
-    return JSON.parse(jsonStr) as RetrofitPlan;
-  } catch (error) {
-    console.error('Failed to analyze repository with AWS Bedrock', error);
+  // Language detection
+  const language: 'typescript' | 'javascript' | 'unknown' = await fs.pathExists(path.join(dir, 'tsconfig.json')) ? 'typescript' : 'javascript';
+
+  // Node version
+  let nodeVersion: string | null = null;
+  try { nodeVersion = (await fs.readFile(path.join(dir, '.nvmrc'), 'utf-8')).trim(); } catch { /* ignore */ }
+  const engines = (pkg.engines ?? {}) as Record<string, string>;
+  if (!nodeVersion && engines?.node) nodeVersion = engines.node;
+
+  // Dependency flags
+  const KNOWN_DEPS = new Set(['next', 'react', 'react-dom', 'nuxt', '@sveltejs/kit', 'remix',
+    'typescript', '@types/node', '@types/react', '@types/react-dom', 'eslint',
+    'postcss', 'autoprefixer', 'tailwindcss', 'zod', 'prisma', '@prisma/client',
+    'drizzle-orm', 'next-auth', '@auth/core', '@clerk/nextjs', '@clerk/clerk-sdk-node',
+    'better-auth', 'stripe', '@supabase/supabase-js', 'mongoose', '@trpc/server',
+    '@trpc/client', '@lemonsqueezy/lemonsqueezy-js', 'lemonsqueezy', 'shadcn-ui']);
+
+  const deps = {
+    hasNextAuth: !!(allDeps['next-auth'] || allDeps['@auth/core']),
+    hasClerk: !!(allDeps['@clerk/nextjs'] || allDeps['@clerk/clerk-sdk-node']),
+    hasBetterAuth: !!allDeps['better-auth'],
+    hasStripe: !!allDeps['stripe'],
+    hasLemonSqueezy: !!(allDeps['@lemonsqueezy/lemonsqueezy-js'] || allDeps['lemonsqueezy']),
+    hasPrisma: !!(allDeps['prisma'] || allDeps['@prisma/client']),
+    hasDrizzle: !!allDeps['drizzle-orm'],
+    hasSupabase: !!allDeps['@supabase/supabase-js'],
+    hasMongoose: !!allDeps['mongoose'],
+    hasTrpc: !!(allDeps['@trpc/server'] || allDeps['@trpc/client']),
+    hasTailwind: !!allDeps['tailwindcss'],
+    hasShadcn: !!(allDeps['shadcn-ui'] || await fs.pathExists(path.join(dir, 'components/ui'))),
+    hasZod: !!allDeps['zod'],
+    other: Object.keys(allDeps).filter(d => !KNOWN_DEPS.has(d)).slice(0, 20),
+  };
+
+  // Key file existence checks (run in parallel)
+  const [
+    middlewareTs, middlewareJs,
+    prismaSchema,
+    stripeWebhookApp, stripeWebhookPages,
+    stripeCheckoutApp, stripeCheckoutPages,
+    authLibTs, authLibJs, authRouteApp, authRoutePage,
+    envExample, envLocalExample,
+    ciWorkflows,
+  ] = await Promise.all([
+    fs.pathExists(path.join(dir, 'middleware.ts')),
+    fs.pathExists(path.join(dir, 'middleware.js')),
+    fs.pathExists(path.join(dir, 'prisma/schema.prisma')),
+    fs.pathExists(path.join(dir, 'app/api/webhooks/stripe/route.ts')),
+    fs.pathExists(path.join(dir, 'pages/api/webhooks/stripe.ts')),
+    fs.pathExists(path.join(dir, 'app/api/checkout/route.ts')),
+    fs.pathExists(path.join(dir, 'pages/api/checkout.ts')),
+    fs.pathExists(path.join(dir, 'lib/auth.ts')),
+    fs.pathExists(path.join(dir, 'lib/auth.js')),
+    fs.pathExists(path.join(dir, 'app/api/auth/[...nextauth]/route.ts')),
+    fs.pathExists(path.join(dir, 'pages/api/auth/[...nextauth].ts')),
+    fs.pathExists(path.join(dir, '.env.example')),
+    fs.pathExists(path.join(dir, '.env.local.example')),
+    fs.pathExists(path.join(dir, '.github/workflows')),
+  ]);
+
+  const files = {
+    hasMiddleware: middlewareTs || middlewareJs,
+    hasPrismaSchema: prismaSchema,
+    hasStripeWebhook: stripeWebhookApp || stripeWebhookPages,
+    hasStripeCheckout: stripeCheckoutApp || stripeCheckoutPages,
+    hasAuthConfig: authLibTs || authLibJs || authRouteApp || authRoutePage,
+    hasEnvExample: envExample || envLocalExample,
+    hasCI: ciWorkflows,
+  };
+
+  // Detect partial implementations
+  const partialImpls: string[] = [];
+  if (deps.hasStripe && !files.hasStripeWebhook) {
+    partialImpls.push('Stripe installed but no webhook handler found');
+  }
+  if (deps.hasStripe && !files.hasStripeCheckout) {
+    partialImpls.push('Stripe installed but no checkout route found');
+  }
+  if (deps.hasNextAuth && !files.hasAuthConfig) {
+    partialImpls.push('next-auth installed but no auth config/route found');
+  }
+  if (deps.hasPrisma && !files.hasPrismaSchema) {
+    partialImpls.push('Prisma installed but no schema.prisma found');
+  }
+  if (deps.hasClerk && files.hasMiddleware) {
+    const mw = await readFileSafe(path.join(dir, middlewareTs ? 'middleware.ts' : 'middleware.js'), 600);
+    if (mw && !mw.toLowerCase().includes('clerk')) {
+      partialImpls.push('Clerk installed but middleware does not import Clerk');
+    }
+  }
+
+  // Compact file tree (first 100 lines covers top-level structure well)
+  const fullTree = await buildFileTree(dir);
+  const treeLines = fullTree.split('\n');
+  const fileCount = treeLines.filter(l => !l.trimEnd().endsWith('/')).length;
+  const compactTree = treeLines.slice(0, 100).join('\n');
+
+  return {
+    packageJsonHash,
+    framework,
+    frameworkVersion,
+    language,
+    nodeVersion,
+    deps,
+    files,
+    partialImpls,
+    fileCount,
+    compactTree,
+  };
+}
+
+// Cache key — stable across calls for the same repo state
+export function computeCacheKey(cloneUrl: string, headSha: string, packageJsonHash: string): string {
+  return crypto.createHash('sha256')
+    .update(`${cloneUrl}::${headSha}::${packageJsonHash}`)
+    .digest('hex');
+}
+
+// ─── Bedrock helpers ──────────────────────────────────────────────────────────
+
+async function invokeBedrock(modelId: string, prompt: string, maxTokens: number): Promise<string> {
+  const command = new InvokeModelCommand({
+    modelId,
+    contentType: 'application/json',
+    accept: 'application/json',
+    body: JSON.stringify({
+      anthropic_version: 'bedrock-2023-05-31',
+      max_tokens: maxTokens,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+  const response = await bedrock.send(command);
+  const result = JSON.parse(new TextDecoder().decode(response.body)) as { content: Array<{ text: string }> };
+  const text = result.content[0]?.text;
+  if (!text) throw new Error('Empty response from Bedrock');
+  return text;
+}
+
+function parseJson<T>(text: string): T {
+  const clean = text.replace(/```json\n?|\n?```/g, '').trim();
+  return JSON.parse(clean) as T;
+}
+
+// ─── Phase 2: Haiku — App Understanding (~0.002¢) ────────────────────────────
+
+async function runHaikuPhase(dir: string, fingerprint: RepoFingerprint): Promise<HaikuInsight> {
+  const readme = await readFileSafe(path.join(dir, 'README.md'), 3000)
+    || await readFileSafe(path.join(dir, 'readme.md'), 3000)
+    || '(no README)';
+
+  // Collect a few page file names to give Haiku app structure context
+  const pageDirs = ['app', 'src/app', 'pages', 'src/pages'].map(d => path.join(dir, d));
+  const pageNames: string[] = [];
+  for (const pageDir of pageDirs) {
+    if (!await fs.pathExists(pageDir)) continue;
+    async function collectPageNames(d: string, depth = 0): Promise<void> {
+      if (depth > 4 || pageNames.length > 30) return;
+      const entries = await fs.readdir(d, { withFileTypes: true }).catch(() => [] as fs.Dirent[]);
+      for (const e of entries) {
+        if (['node_modules', '.next', 'api'].includes(e.name)) continue;
+        if (e.isDirectory()) await collectPageNames(path.join(d, e.name), depth + 1);
+        else if (/^(page|layout)\.(tsx|jsx|ts|js)$/.test(e.name)) {
+          pageNames.push(path.relative(dir, path.join(d, e.name)));
+        }
+      }
+    }
+    await collectPageNames(pageDir);
+    break; // only scan the first found page dir
+  }
+
+  const fingerprintSummary = JSON.stringify({
+    framework: fingerprint.framework,
+    language: fingerprint.language,
+    deps: fingerprint.deps,
+    files: fingerprint.files,
+    partialImpls: fingerprint.partialImpls,
+    fileCount: fingerprint.fileCount,
+  }, null, 2);
+
+  const prompt = `You are a fast technical classifier. Identify what this app is and which injection layers matter most.
+
+=== README ===
+${readme}
+
+=== Page files ===
+${pageNames.join('\n') || '(none found)'}
+
+=== Detected dependencies & files ===
+${fingerprintSummary}
+
+Return ONLY valid JSON with no explanation:
+{
+  "appDescription": "2-3 sentences describing what the app does based on README and page structure",
+  "pattern": "crud" | "dashboard" | "landing" | "ai-app" | "ecommerce" | "generic",
+  "userContext": "1 sentence: who uses it and why",
+  "focusLayers": ["auth", "payments", "database", "ci"]
+}
+
+For focusLayers: include all layers that need DEEP investigation. Include "auth" if hasNextAuth/hasClerk/hasBetterAuth is false OR partial. Include "payments" if hasStripe is false OR partial webhook. Include "database" if hasPrisma/hasDrizzle/hasSupabase is false. Include "ci" if hasCI is false. Always include at least 2 layers.`;
+
+  try {
+    const text = await invokeBedrock(HAIKU_MODEL_ID, prompt, 400);
+    return parseJson<HaikuInsight>(text);
+  } catch {
+    // Fallback: infer from fingerprint without Haiku
+    const focusLayers: HaikuInsight['focusLayers'] = [];
+    const { deps, files } = fingerprint;
+    if (!deps.hasNextAuth && !deps.hasClerk && !deps.hasBetterAuth) focusLayers.push('auth');
+    if (!deps.hasStripe && !deps.hasLemonSqueezy) focusLayers.push('payments');
+    if (!deps.hasPrisma && !deps.hasDrizzle && !deps.hasSupabase && !deps.hasMongoose) focusLayers.push('database');
+    if (!files.hasCI) focusLayers.push('ci');
     return {
+      appDescription: 'App description unavailable — proceeding with full analysis.',
       pattern: 'generic',
-      modifications: []
+      userContext: 'Unknown',
+      focusLayers: focusLayers.length ? focusLayers : ['auth', 'payments', 'database', 'ci'],
     };
   }
+}
+
+// ─── Phase 3: Sonnet — Plan + Safety Check (~2–3¢) ───────────────────────────
+
+async function buildTargetedContext(
+  dir: string,
+  fingerprint: RepoFingerprint,
+  focusLayers: HaikuInsight['focusLayers'],
+): Promise<string> {
+  // Always-include files (small, high signal)
+  const always: Array<{ path: string; maxChars: number }> = [
+    { path: 'package.json', maxChars: 4000 },
+    { path: 'apps/web/package.json', maxChars: 3000 },
+    { path: 'next.config.ts', maxChars: 2000 },
+    { path: 'next.config.js', maxChars: 2000 },
+    { path: 'next.config.mjs', maxChars: 2000 },
+    { path: 'tsconfig.json', maxChars: 1500 },
+    { path: 'app/layout.tsx', maxChars: 2000 },
+    { path: 'src/app/layout.tsx', maxChars: 2000 },
+    { path: 'app/page.tsx', maxChars: 1500 },
+    { path: 'src/app/page.tsx', maxChars: 1500 },
+  ];
+
+  // Layer-specific files — only loaded when that layer is in focusLayers
+  const layerFiles: Record<string, Array<{ path: string; maxChars: number }>> = {
+    auth: [
+      { path: 'lib/auth.ts', maxChars: 4000 },
+      { path: 'lib/auth.js', maxChars: 4000 },
+      { path: 'src/lib/auth.ts', maxChars: 4000 },
+      { path: 'app/api/auth/[...nextauth]/route.ts', maxChars: 4000 },
+      { path: 'pages/api/auth/[...nextauth].ts', maxChars: 4000 },
+      { path: 'middleware.ts', maxChars: 3000 },
+      { path: 'middleware.js', maxChars: 3000 },
+    ],
+    payments: [
+      { path: 'lib/stripe.ts', maxChars: 4000 },
+      { path: 'lib/stripe.js', maxChars: 4000 },
+      { path: 'lib/payments.ts', maxChars: 4000 },
+      { path: 'app/api/webhooks/stripe/route.ts', maxChars: 4000 },
+      { path: 'app/api/checkout/route.ts', maxChars: 3000 },
+      { path: 'pages/api/webhooks/stripe.ts', maxChars: 4000 },
+      { path: 'pages/api/checkout.ts', maxChars: 3000 },
+    ],
+    database: [
+      { path: 'prisma/schema.prisma', maxChars: 5000 },
+      { path: 'db/schema.ts', maxChars: 5000 },
+      { path: 'src/db/schema.ts', maxChars: 5000 },
+      { path: 'drizzle.config.ts', maxChars: 2000 },
+      { path: 'lib/db.ts', maxChars: 3000 },
+      { path: 'lib/db.js', maxChars: 3000 },
+      { path: 'lib/prisma.ts', maxChars: 2000 },
+      { path: 'lib/supabase.ts', maxChars: 3000 },
+      { path: 'src/lib/db.ts', maxChars: 3000 },
+    ],
+    ci: [
+      { path: '.github/workflows/ci.yml', maxChars: 2000 },
+      { path: '.github/workflows/main.yml', maxChars: 2000 },
+      { path: '.env.example', maxChars: 3000 },
+      { path: '.env.local.example', maxChars: 3000 },
+    ],
+  };
+
+  const targets = [...always];
+  for (const layer of focusLayers) {
+    if (layerFiles[layer]) targets.push(...layerFiles[layer]);
+  }
+
+  // De-dupe paths
+  const seen = new Set<string>();
+  const unique = targets.filter(t => {
+    if (seen.has(t.path)) return false;
+    seen.add(t.path);
+    return true;
+  });
+
+  const parts: string[] = [];
+  for (const t of unique) {
+    const content = await readFileSafe(path.join(dir, t.path), t.maxChars);
+    if (content) parts.push(`\n=== ${t.path} ===\n${content}`);
+  }
+  return parts.join('\n');
+}
+
+// ─── Phase 3: Sonnet analysis ─────────────────────────────────────────────────
+
+async function runSonnetPhase(
+  dir: string,
+  fingerprint: RepoFingerprint,
+  haiku: HaikuInsight,
+): Promise<AnalysisReport> {
+  const [sourceFiles, apiRoutes] = await Promise.all([
+    buildTargetedContext(dir, fingerprint, haiku.focusLayers),
+    discoverAndReadApiRoutes(dir),
+  ]);
+
+  const fingerprintJson = JSON.stringify({
+    framework: fingerprint.framework,
+    frameworkVersion: fingerprint.frameworkVersion,
+    language: fingerprint.language,
+    nodeVersion: fingerprint.nodeVersion,
+    deps: fingerprint.deps,
+    files: fingerprint.files,
+    partialImpls: fingerprint.partialImpls,
+    fileCount: fingerprint.fileCount,
+  }, null, 2);
+
+  const prompt = `You are a senior full-stack engineer and SaaS monetization expert auditing a GitHub repository. Every claim must be grounded in the actual code provided below.
+
+=== PHASE 1 FINGERPRINT (pre-computed, trust this) ===
+${fingerprintJson}
+
+=== PHASE 2 APP CONTEXT ===
+appDescription: ${haiku.appDescription}
+pattern: ${haiku.pattern}
+userContext: ${haiku.userContext}
+focusLayers: ${haiku.focusLayers.join(', ')}
+
+=== FILE TREE (compact) ===
+${fingerprint.compactTree}
+
+=== TARGETED SOURCE FILES (auth/payments/db/ci for focus layers only) ===
+${sourceFiles || '(no source files found)'}
+
+=== API ROUTES ===
+${apiRoutes.content || '(no API routes found)'}
+
+===========================================================
+INSTRUCTIONS
+===========================================================
+
+The detectedStack values for hasAuth/hasPayments/hasDatabase/hasCI can be inferred directly from the fingerprint — use it. Focus your AI reasoning on:
+1. Specific code-level insights (bugs, gaps, partial impls) found in the source files above
+2. Detailed injection plans for the focusLayers: ${haiku.focusLayers.join(', ')}
+3. Conflict detection between existing code and proposed injections
+
+DETECTION RULES — only mark as present with concrete fingerprint/code evidence:
+- hasAuth: fingerprint.deps.hasNextAuth/hasClerk/hasBetterAuth, OR auth route file with actual handler code
+- hasPayments: fingerprint.deps.hasStripe/hasLemonSqueezy, OR checkout/webhook route with actual handler
+- hasDatabase: fingerprint.deps.hasPrisma/hasDrizzle/hasSupabase/hasMongoose, OR schema file with models
+- hasCI: fingerprint.files.hasCI
+
+For codeInsights, find REAL specific things:
+- "Found useSession() called in dashboard/page.tsx but no SessionProvider in layout.tsx"
+- "prisma/schema.prisma has User and Post models but no Subscription model"
+- "Stripe SDK installed but app/api/webhooks/stripe/route.ts is missing"
+
+For injectionOpportunities, reference actual files found. Include ALL layers (auth/payments/database/ci/env), not just focusLayers.
+
+For monetizationReadiness score: 0=nothing, 30=DB only, 50=DB+auth, 70=DB+auth+partial payments, 90+=fully wired.
+
+For apiRoutes: ${JSON.stringify(apiRoutes.paths)}
+
+Return ONLY valid JSON — no markdown, no code fences:
+
+{
+  "detectedStack": {
+    "framework": "string",
+    "frameworkVersion": "string",
+    "language": "typescript" | "javascript" | "unknown",
+    "nodeVersion": string | null,
+    "hasAuth": boolean,
+    "authProvider": string | null,
+    "authDetails": "specific: e.g. next-auth v4.24.5 with GitHub OAuth, sessions in JWT",
+    "hasPayments": boolean,
+    "paymentsProvider": string | null,
+    "paymentsDetails": "specific: e.g. stripe@14.x installed but no webhook handler",
+    "hasDatabase": boolean,
+    "dbProvider": string | null,
+    "dbDetails": "specific: e.g. Prisma v5.x with PostgreSQL, User+Post models, no Subscription table",
+    "hasCI": boolean,
+    "ciDetails": string | null,
+    "otherDependencies": ["notable ones: tailwind, shadcn, zod, react-query, trpc, etc."]
+  },
+  "pattern": "crud" | "dashboard" | "landing" | "ai-app" | "ecommerce" | "generic",
+  "appDescription": "3-4 sentences based on README and pages",
+  "apiRoutes": ["every api route file path discovered"],
+  "codeInsights": [
+    {
+      "category": "auth" | "payments" | "database" | "architecture" | "security" | "performance",
+      "finding": "short title",
+      "evidence": "exact file/package proving this",
+      "recommendation": "specific fix or what Prodify does"
+    }
+  ],
+  "injectionOpportunities": [
+    {
+      "layer": "auth" | "payments" | "database" | "ci" | "env",
+      "canInject": boolean,
+      "currentState": "reference actual files/packages found",
+      "proposed": "specific routes, packages, schema tables",
+      "filesToCreate": ["exact/relative/paths.ts"],
+      "effort": "low" | "medium" | "high",
+      "gaps": ["specific gap referencing missing code"],
+      "implementation": "detailed paragraph: exact API routes, functions, DB schema fields, webhook events, integration points",
+      "envVarsNeeded": ["EXACT_VAR_NAME"]
+    }
+  ],
+  "conflicts": [
+    {
+      "description": "specific conflict referencing actual files",
+      "severity": "warning" | "blocker",
+      "resolution": "concrete steps",
+      "affectedFiles": ["actual/file/paths.ts"]
+    }
+  ],
+  "summary": "4-5 sentences: what the app does, exact infrastructure state, what is missing, why monetization isn't possible yet, what Prodify fixes",
+  "monetizationReadiness": {
+    "score": 0,
+    "blockers": ["specific technical blocker grounded in code"],
+    "quickWins": ["specific Prodify injection that unblocks a blocker"]
+  }
+}`;
+
+  const text = await invokeBedrock(SONNET_MODEL_ID, prompt, 8000);
+  return parseJson<AnalysisReport>(text);
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+// Phase 2 + 3 combined — call this after a cache miss
+export async function analyzeWithAI(dir: string, fingerprint: RepoFingerprint): Promise<AnalysisReport> {
+  const haiku = await runHaikuPhase(dir, fingerprint);
+  return runSonnetPhase(dir, fingerprint, haiku);
+}
+
+// Convenience wrapper: scan + analyze in one call
+export async function analyzeRepository(dir: string): Promise<AnalysisReport> {
+  const fingerprint = await scanRepository(dir);
+  return analyzeWithAI(dir, fingerprint);
+}
+
+// ─── Fallback report (used on unrecoverable error) ────────────────────────────
+
+export function buildFallbackReport(): AnalysisReport {
+  return {
+    detectedStack: {
+      framework: 'Next.js', frameworkVersion: 'unknown', language: 'typescript',
+      nodeVersion: null, hasAuth: false, authProvider: null, authDetails: null,
+      hasPayments: false, paymentsProvider: null, paymentsDetails: null,
+      hasDatabase: false, dbProvider: null, dbDetails: null,
+      hasCI: false, ciDetails: null, otherDependencies: [],
+    },
+    pattern: 'generic',
+    appDescription: 'Analysis could not be completed. Please try again.',
+    apiRoutes: [],
+    codeInsights: [],
+    injectionOpportunities: [
+      {
+        layer: 'auth', canInject: true, currentState: 'Not found in codebase',
+        proposed: 'NextAuth.js with InsForge backend',
+        filesToCreate: ['prodify-layer/auth/[...nextauth].ts'], effort: 'low',
+        gaps: ['No authentication system detected'],
+        implementation: 'NextAuth.js with credentials + GitHub OAuth, session management via InsForge',
+        envVarsNeeded: ['NEXTAUTH_SECRET', 'NEXTAUTH_URL'],
+      },
+      {
+        layer: 'payments', canInject: true, currentState: 'Not found in codebase',
+        proposed: 'Stripe Checkout + webhooks + customer portal',
+        filesToCreate: ['prodify-layer/payments/stripe.ts', 'prodify-layer/app/api/checkout/route.ts', 'prodify-layer/app/api/webhooks/stripe/route.ts'],
+        effort: 'medium', gaps: ['No Stripe integration', 'No webhook handler'],
+        implementation: 'Full Stripe Checkout with subscription management and customer portal',
+        envVarsNeeded: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_PRICE_ID'],
+      },
+      {
+        layer: 'database', canInject: true, currentState: 'Not found in codebase',
+        proposed: 'InsForge SQL schema with users, subscriptions tables',
+        filesToCreate: ['prodify-layer/db/schema.sql', 'prodify-layer/db/insforge.ts'],
+        effort: 'low', gaps: ['No database schema'],
+        implementation: 'InsForge PostgreSQL schema with users, subscriptions, and webhook_events tables',
+        envVarsNeeded: ['INSFORGE_URL', 'INSFORGE_ANON_KEY'],
+      },
+      {
+        layer: 'ci', canInject: true, currentState: 'Not found in codebase',
+        proposed: 'GitHub Actions — typecheck + test on push/PR',
+        filesToCreate: ['.github/workflows/ci.yml'], effort: 'low',
+        gaps: ['No automated testing pipeline'],
+        implementation: 'GitHub Actions workflow running tsc --noEmit and npm test on every push and PR',
+        envVarsNeeded: [],
+      },
+    ],
+    conflicts: [],
+    summary: 'Analysis could not be completed automatically. All standard injection opportunities are available.',
+    monetizationReadiness: { score: 0, blockers: ['Analysis failed — please retry'], quickWins: [] },
+  };
 }

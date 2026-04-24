@@ -112,6 +112,13 @@ export async function POST(
         const existingResult = project.analysisResult as (Record<string, unknown> & { _cacheKey?: string }) | null;
 
         if (existingResult?._cacheKey === cacheKey) {
+          // Reset status back to 'analyzed' — the route set it to 'analyzing' at the top,
+          // and on a cache hit it never wrote it back. This left the DB stuck at 'analyzing'
+          // which caused the scanning UI to keep showing on every reload.
+          await userInsforge.database
+            .from('projects')
+            .update({ status: 'analyzed' })
+            .eq('id', id);
           send(controller, 'progress', { step: 5, total: 5, message: 'Returning cached analysis...' });
           send(controller, 'done', { report: existingResult, cached: true });
           controller.close();

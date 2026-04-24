@@ -5,6 +5,13 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
+type CodeInsight = {
+  category: 'auth' | 'payments' | 'database' | 'architecture' | 'security' | 'performance';
+  finding: string;
+  evidence: string;
+  recommendation: string;
+};
+
 type AnalysisReport = {
   detectedStack: {
     framework: string;
@@ -26,6 +33,8 @@ type AnalysisReport = {
   };
   pattern: string;
   appDescription?: string;
+  apiRoutes?: string[];
+  codeInsights?: CodeInsight[];
   injectionOpportunities: Array<{
     layer: string;
     canInject: boolean;
@@ -336,7 +345,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             </div>
 
             {/* Stack badges */}
-            <div className="flex flex-wrap gap-2 mb-4">
+            <div className="flex flex-wrap gap-2 mb-3">
               <StackBadge label={`${report.detectedStack.framework}${report.detectedStack.frameworkVersion ? ` ${report.detectedStack.frameworkVersion}` : ''}`} />
               <StackBadge label={report.detectedStack.language.toUpperCase()} />
               {report.detectedStack.authProvider && <StackBadge label={`Auth: ${report.detectedStack.authProvider}`} color="amber" />}
@@ -349,6 +358,21 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 <StackBadge key={dep} label={dep} color="gray" />
               ))}
             </div>
+
+            {/* Stack detail lines */}
+            {(report.detectedStack.authDetails || report.detectedStack.paymentsDetails || report.detectedStack.dbDetails) && (
+              <div className="space-y-1 mb-3">
+                {report.detectedStack.authDetails && (
+                  <p className="text-xs text-gray-500 flex gap-1.5"><span className="text-blue-400 shrink-0">🔐</span>{report.detectedStack.authDetails}</p>
+                )}
+                {report.detectedStack.paymentsDetails && (
+                  <p className="text-xs text-gray-500 flex gap-1.5"><span className="text-emerald-400 shrink-0">💳</span>{report.detectedStack.paymentsDetails}</p>
+                )}
+                {report.detectedStack.dbDetails && (
+                  <p className="text-xs text-gray-500 flex gap-1.5"><span className="text-violet-400 shrink-0">🗄️</span>{report.detectedStack.dbDetails}</p>
+                )}
+              </div>
+            )}
 
             {/* Monetization blockers + quick wins */}
             {report.monetizationReadiness && (
@@ -399,6 +423,59 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Code Insights — real findings from scanning the code */}
+          {report.codeInsights && report.codeInsights.length > 0 && (
+            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <h3 className="font-semibold text-gray-900 mb-4">Code findings</h3>
+              <div className="space-y-3">
+                {report.codeInsights.map((insight, i) => {
+                  const categoryColor: Record<string, string> = {
+                    auth: 'bg-blue-50 border-blue-200 text-blue-700',
+                    payments: 'bg-emerald-50 border-emerald-200 text-emerald-700',
+                    database: 'bg-violet-50 border-violet-200 text-violet-700',
+                    security: 'bg-red-50 border-red-200 text-red-700',
+                    performance: 'bg-amber-50 border-amber-200 text-amber-700',
+                    architecture: 'bg-gray-50 border-gray-200 text-gray-700',
+                  };
+                  const categoryIcon: Record<string, string> = {
+                    auth: '🔐', payments: '💳', database: '🗄️',
+                    security: '🛡️', performance: '⚡', architecture: '🏗️',
+                  };
+                  const colorClass = categoryColor[insight.category] ?? categoryColor.architecture;
+                  return (
+                    <div key={i} className={`rounded-xl border p-4 ${colorClass}`}>
+                      <div className="flex items-start gap-2">
+                        <span className="text-base shrink-0">{categoryIcon[insight.category] ?? '🔍'}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold mb-0.5">{insight.finding}</p>
+                          <p className="text-xs opacity-80 font-mono mb-1.5 truncate">{insight.evidence}</p>
+                          <p className="text-xs opacity-90">{insight.recommendation}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* API Routes discovered */}
+          {report.apiRoutes && report.apiRoutes.length > 0 && (
+            <div className="bg-white rounded-2xl border border-gray-100 p-6">
+              <h3 className="font-semibold text-gray-900 mb-3">
+                API routes found
+                <span className="ml-2 text-xs font-normal text-gray-400">({report.apiRoutes.length} total)</span>
+              </h3>
+              <div className="flex flex-wrap gap-1.5">
+                {report.apiRoutes.map(route => (
+                  <code key={route} className="text-xs bg-gray-50 border border-gray-200 text-gray-600 px-2 py-1 rounded-lg">
+                    {route}
+                  </code>
+                ))}
+              </div>
             </div>
           )}
 

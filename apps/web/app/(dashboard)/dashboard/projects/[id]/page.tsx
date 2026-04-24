@@ -8,16 +8,24 @@ import { Button } from '@/components/ui/button';
 type AnalysisReport = {
   detectedStack: {
     framework: string;
+    frameworkVersion?: string;
     language: string;
+    nodeVersion?: string | null;
     hasAuth: boolean;
     authProvider: string | null;
+    authDetails?: string | null;
     hasPayments: boolean;
     paymentsProvider: string | null;
+    paymentsDetails?: string | null;
     hasDatabase: boolean;
     dbProvider: string | null;
+    dbDetails?: string | null;
     hasCI: boolean;
+    ciDetails?: string | null;
+    otherDependencies?: string[];
   };
   pattern: string;
+  appDescription?: string;
   injectionOpportunities: Array<{
     layer: string;
     canInject: boolean;
@@ -25,13 +33,22 @@ type AnalysisReport = {
     proposed: string;
     filesToCreate: string[];
     effort: string;
+    gaps?: string[];
+    implementation?: string;
+    envVarsNeeded?: string[];
   }>;
   conflicts: Array<{
     description: string;
     severity: 'warning' | 'blocker';
     resolution: string;
+    affectedFiles?: string[];
   }>;
   summary: string;
+  monetizationReadiness?: {
+    score: number;
+    blockers: string[];
+    quickWins: string[];
+  };
 };
 
 type Project = {
@@ -294,12 +311,33 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       {/* ANALYZED — report + config form */}
       {status === 'analyzed' && report && !injecting && (
         <div className="space-y-6">
-          {/* Summary */}
+          {/* Summary + monetization score */}
           <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <h2 className="font-semibold text-gray-900 mb-3">Analysis complete</h2>
-            <p className="text-sm text-gray-600 mb-4">{report.summary}</p>
-            <div className="flex flex-wrap gap-2">
-              <StackBadge label={report.detectedStack.framework} />
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div className="flex-1">
+                <h2 className="font-semibold text-gray-900 mb-1">Analysis complete</h2>
+                {report.appDescription && (
+                  <p className="text-sm text-gray-500 mb-3 italic">{report.appDescription}</p>
+                )}
+                <p className="text-sm text-gray-700">{report.summary}</p>
+              </div>
+              {report.monetizationReadiness && (
+                <div className="shrink-0 text-center">
+                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold ${
+                    report.monetizationReadiness.score >= 70 ? 'bg-emerald-50 text-emerald-700' :
+                    report.monetizationReadiness.score >= 40 ? 'bg-amber-50 text-amber-700' :
+                    'bg-red-50 text-red-700'
+                  }`}>
+                    {report.monetizationReadiness.score}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">Monetization<br/>readiness</p>
+                </div>
+              )}
+            </div>
+
+            {/* Stack badges */}
+            <div className="flex flex-wrap gap-2 mb-4">
+              <StackBadge label={`${report.detectedStack.framework}${report.detectedStack.frameworkVersion ? ` ${report.detectedStack.frameworkVersion}` : ''}`} />
               <StackBadge label={report.detectedStack.language.toUpperCase()} />
               {report.detectedStack.authProvider && <StackBadge label={`Auth: ${report.detectedStack.authProvider}`} color="amber" />}
               {report.detectedStack.dbProvider && <StackBadge label={`DB: ${report.detectedStack.dbProvider}`} color="amber" />}
@@ -307,7 +345,36 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               {!report.detectedStack.hasAuth && <StackBadge label="No auth" color="red" />}
               {!report.detectedStack.hasPayments && <StackBadge label="No payments" color="red" />}
               {!report.detectedStack.hasDatabase && <StackBadge label="No database" color="red" />}
+              {report.detectedStack.otherDependencies?.map(dep => (
+                <StackBadge key={dep} label={dep} color="gray" />
+              ))}
             </div>
+
+            {/* Monetization blockers + quick wins */}
+            {report.monetizationReadiness && (
+              <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-gray-50">
+                <div>
+                  <p className="text-xs font-semibold text-red-600 mb-2">🚧 Blockers before monetizing</p>
+                  <ul className="space-y-1">
+                    {report.monetizationReadiness.blockers.map((b, i) => (
+                      <li key={i} className="text-xs text-gray-600 flex gap-1.5">
+                        <span className="text-red-400 shrink-0">•</span>{b}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-emerald-600 mb-2">⚡ Quick wins Prodify can inject</p>
+                  <ul className="space-y-1">
+                    {report.monetizationReadiness.quickWins.map((w, i) => (
+                      <li key={i} className="text-xs text-gray-600 flex gap-1.5">
+                        <span className="text-emerald-400 shrink-0">•</span>{w}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Conflicts / warnings */}
@@ -319,47 +386,100 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                   className={`rounded-xl p-4 flex gap-3 ${c.severity === 'blocker' ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200'}`}
                 >
                   <span className="text-lg shrink-0">{c.severity === 'blocker' ? '🚫' : '⚠️'}</span>
-                  <div>
+                  <div className="flex-1">
                     <p className={`text-sm font-medium ${c.severity === 'blocker' ? 'text-red-800' : 'text-amber-800'}`}>{c.description}</p>
                     <p className={`text-xs mt-0.5 ${c.severity === 'blocker' ? 'text-red-600' : 'text-amber-600'}`}>Resolution: {c.resolution}</p>
+                    {c.affectedFiles && c.affectedFiles.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {c.affectedFiles.map(f => (
+                          <code key={f} className="text-xs bg-white border border-red-200 text-red-700 px-1.5 py-0.5 rounded">{f}</code>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Injection opportunities */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <h3 className="font-semibold text-gray-900 mb-4">What will be injected</h3>
-            <div className="space-y-3">
-              {report.injectionOpportunities.map((opp, i) => (
-                <div key={i} className={`rounded-xl p-4 border ${opp.canInject ? 'border-gray-100' : 'border-gray-100 opacity-60'}`}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-lg">{LAYER_ICONS[opp.layer] ?? '📦'}</span>
-                    <span className="font-medium text-sm text-gray-900 capitalize">{opp.layer}</span>
-                    <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${EFFORT_COLOR[opp.effort] ?? 'text-gray-600 bg-gray-100'}`}>
-                      {opp.effort} effort
-                    </span>
-                    {opp.canInject
-                      ? <span className="text-xs text-emerald-600 font-medium">✓ Will inject</span>
-                      : <span className="text-xs text-gray-400">Already present</span>
-                    }
+          {/* Injection opportunities — detailed */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-gray-900">What will be injected</h3>
+            {report.injectionOpportunities.map((opp, i) => (
+              <div key={i} className={`bg-white rounded-2xl border p-5 ${opp.canInject ? 'border-gray-100' : 'border-gray-100 opacity-60'}`}>
+                {/* Header */}
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-xl">{LAYER_ICONS[opp.layer] ?? '📦'}</span>
+                  <span className="font-semibold text-gray-900 capitalize">{opp.layer}</span>
+                  <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${EFFORT_COLOR[opp.effort] ?? 'text-gray-600 bg-gray-100'}`}>
+                    {opp.effort} effort
+                  </span>
+                  {opp.canInject
+                    ? <span className="text-xs text-emerald-600 font-medium bg-emerald-50 px-2 py-0.5 rounded-full">✓ Will inject</span>
+                    : <span className="text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">Already present</span>
+                  }
+                </div>
+
+                {/* Current → Proposed */}
+                <div className="flex items-start gap-2 text-xs mb-3 p-3 bg-gray-50 rounded-xl">
+                  <div className="flex-1">
+                    <p className="text-gray-400 font-medium mb-0.5">CURRENT</p>
+                    <p className="text-gray-600">{opp.currentState}</p>
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-                    <span className="line-through">{opp.currentState}</span>
-                    <span>→</span>
-                    <span className="text-gray-700">{opp.proposed}</span>
+                  <span className="text-gray-300 mt-4">→</span>
+                  <div className="flex-1">
+                    <p className="text-violet-500 font-medium mb-0.5">AFTER INJECTION</p>
+                    <p className="text-gray-700">{opp.proposed}</p>
                   </div>
-                  {opp.filesToCreate.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
+                </div>
+
+                {/* Gaps */}
+                {opp.gaps && opp.gaps.length > 0 && (
+                  <div className="mb-3">
+                    <p className="text-xs font-semibold text-gray-500 mb-1.5">Missing pieces</p>
+                    <ul className="space-y-1">
+                      {opp.gaps.map((gap, j) => (
+                        <li key={j} className="text-xs text-gray-600 flex gap-1.5">
+                          <span className="text-red-400 shrink-0">✗</span>{gap}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Implementation detail */}
+                {opp.implementation && (
+                  <div className="mb-3">
+                    <p className="text-xs font-semibold text-gray-500 mb-1.5">What Prodify will build</p>
+                    <p className="text-xs text-gray-600 leading-relaxed">{opp.implementation}</p>
+                  </div>
+                )}
+
+                {/* Files to create */}
+                {opp.filesToCreate.length > 0 && (
+                  <div className="mb-3">
+                    <p className="text-xs font-semibold text-gray-500 mb-1.5">Files that will be created</p>
+                    <div className="flex flex-wrap gap-1">
                       {opp.filesToCreate.map(f => (
                         <code key={f} className="text-xs bg-gray-50 border border-gray-200 text-gray-600 px-1.5 py-0.5 rounded">{f}</code>
                       ))}
                     </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                  </div>
+                )}
+
+                {/* Env vars needed */}
+                {opp.envVarsNeeded && opp.envVarsNeeded.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 mb-1.5">Env vars you'll need to add</p>
+                    <div className="flex flex-wrap gap-1">
+                      {opp.envVarsNeeded.map(v => (
+                        <code key={v} className="text-xs bg-amber-50 border border-amber-200 text-amber-700 px-1.5 py-0.5 rounded">{v}</code>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
 
           {/* Config form */}

@@ -7,6 +7,16 @@ import { Button } from '@/components/ui/button';
 import { RepoImportDialog } from '@/components/dashboard/repo-import-dialog';
 import { cn } from '@/lib/utils';
 
+type ActivityEvent = {
+  id: string;
+  type: string;
+  message: string;
+  projectId: string | null;
+  projectName: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+};
+
 type Project = {
   id: string;
   name: string;
@@ -18,6 +28,27 @@ type Project = {
   createdAt: string;
   updatedAt: string;
 };
+
+const ACTIVITY_ICONS: Record<string, string> = {
+  project_created:      '📁',
+  analysis_started:     '🔍',
+  analysis_completed:   '✅',
+  analysis_failed:      '❌',
+  injection_started:    '⚡',
+  injection_completed:  '🎉',
+  injection_failed:     '❌',
+  pr_opened:            '🔀',
+};
+
+function timeAgoShort(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   draft:     { label: 'Draft',     color: '#8589b2', bg: 'rgba(133,137,178,0.1)' },
@@ -44,13 +75,7 @@ function getColor(id: string) {
 }
 
 function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+  return timeAgoShort(iso);
 }
 
 export default function DashboardPage() {
@@ -59,6 +84,7 @@ export default function DashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [importOpen, setImportOpen] = useState(false);
+  const [activity, setActivity] = useState<ActivityEvent[]>([]);
 
   const fetchProjects = useCallback(async () => {
     setLoading(true);
@@ -68,7 +94,16 @@ export default function DashboardPage() {
     setLoading(false);
   }, []);
 
+  const fetchActivity = useCallback(async () => {
+    const res = await fetch('/api/activity');
+    if (res.ok) {
+      const data = await res.json() as { events: ActivityEvent[] };
+      setActivity(data.events ?? []);
+    }
+  }, []);
+
   useEffect(() => { void fetchProjects(); }, [fetchProjects]);
+  useEffect(() => { void fetchActivity(); }, [fetchActivity]);
 
   const firstName = session?.user?.name?.split(' ')[0] ?? 'there';
   const hour = new Date().getHours();
@@ -213,7 +248,28 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <RepoImportDialog open={importOpen} onOpenChange={setImportOpen} />
+      {/* Activity feed */}
+      {activity.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-sm font-semibold text-gray-700 mb-3">Recent Activity</h2>
+          <div className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-50">
+            {activity.slice(0, 8).map(event => (
+              <div key={event.id} className="flex items-start gap-3 px-4 py-3">
+                <span className="text-base shrink-0 mt-0.5">{ACTIVITY_ICONS[event.type] ?? '📌'}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-700 truncate">{event.message}</p>
+                  {event.projectName && (
+                    <p className="text-xs text-gray-400 mt-0.5 truncate">{event.projectName}</p>
+                  )}
+                </div>
+                <span className="text-xs text-gray-400 shrink-0 mt-0.5">{timeAgoShort(event.createdAt)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <RepoImportDialog open={importOpen} onOpenChange={setImportOpen} onImported={fetchProjects} />
     </div>
   );
 }

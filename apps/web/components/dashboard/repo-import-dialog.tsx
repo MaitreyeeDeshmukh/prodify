@@ -30,6 +30,7 @@ type Repo = {
 type Props = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  onImported?: () => void;
 };
 
 const LANGUAGE_COLORS: Record<string, string> = {
@@ -42,7 +43,7 @@ const LANGUAGE_COLORS: Record<string, string> = {
   CSS: '#563d7c',
 };
 
-export function RepoImportDialog({ open, onOpenChange }: Props) {
+export function RepoImportDialog({ open, onOpenChange, onImported }: Props) {
   const router = useRouter();
   const [step, setStep] = useState<'loading' | 'connect' | 'pick' | 'manual' | 'creating'>('loading');
   const [repos, setRepos] = useState<Repo[]>([]);
@@ -97,6 +98,7 @@ export function RepoImportDialog({ open, onOpenChange }: Props) {
     }
 
     onOpenChange(false);
+    onImported?.();
     router.push(`/dashboard/projects/${data.project.id}`);
   }
 

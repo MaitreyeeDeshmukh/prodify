@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
 
 type CodeInsight = {
   category: 'auth' | 'payments' | 'database' | 'architecture' | 'security' | 'performance';
@@ -85,10 +84,10 @@ const LAYER_ICONS: Record<string, string> = {
   env: '🔑',
 };
 
-const EFFORT_COLOR: Record<string, string> = {
-  low: 'text-emerald-600 bg-emerald-50',
-  medium: 'text-amber-600 bg-amber-50',
-  high: 'text-red-600 bg-red-50',
+const EFFORT_COLOR: Record<string, { color: string; bg: string }> = {
+  low:    { color: '#10b981', bg: 'rgba(16,185,129,0.12)' },
+  medium: { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' },
+  high:   { color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
 };
 
 export default function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
@@ -223,7 +222,10 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-6 h-6 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
+        <div
+          className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin"
+          style={{ borderColor: '#575efe', borderTopColor: 'transparent' }}
+        />
       </div>
     );
   }
@@ -362,17 +364,19 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const reportContent = report ? (
     <div className="space-y-6">
       {/* Summary + monetization score */}
-      <div className="bg-white rounded-2xl border border-gray-100 p-6">
+      <div className="p-6" style={{ background: 'rgba(27,30,61,0.5)', backdropFilter: 'blur(20px)', border: '1px solid #1a1b2e', borderRadius: '1rem' }}>
         <div className="flex items-start justify-between gap-4 mb-4">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-1">
-              <h2 className="font-semibold text-gray-900">Analysis report</h2>
-              {/* Download buttons */}
+              <h2 className="font-semibold" style={{ color: '#e3f4f8' }}>Analysis report</h2>
               <div className="flex items-center gap-1 ml-auto">
                 <button
                   onClick={() => downloadReport('markdown')}
                   title="Download as Markdown"
-                  className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-lg transition-colors"
+                  className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg transition-colors"
+                  style={{ color: '#8589b2', background: 'rgba(255,255,255,0.04)', border: '1px solid #323779' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#e3f4f8'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#8589b2'; }}
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -382,7 +386,10 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 <button
                   onClick={() => downloadReport('json')}
                   title="Download as JSON"
-                  className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-lg transition-colors"
+                  className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg transition-colors"
+                  style={{ color: '#8589b2', background: 'rgba(255,255,255,0.04)', border: '1px solid #323779' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#e3f4f8'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#8589b2'; }}
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -392,20 +399,24 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               </div>
             </div>
             {report.appDescription && (
-              <p className="text-sm text-gray-500 mb-3 italic">{report.appDescription}</p>
+              <p className="text-sm mb-3 italic" style={{ color: '#8589b2' }}>{report.appDescription}</p>
             )}
-            <p className="text-sm text-gray-700">{report.summary}</p>
+            <p className="text-sm" style={{ color: '#e3f4f8' }}>{report.summary}</p>
           </div>
           {report.monetizationReadiness && (
             <div className="shrink-0 text-center">
-              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold ${
-                report.monetizationReadiness.score >= 70 ? 'bg-emerald-50 text-emerald-700' :
-                report.monetizationReadiness.score >= 40 ? 'bg-amber-50 text-amber-700' :
-                'bg-red-50 text-red-700'
-              }`}>
+              <div
+                className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black"
+                style={{
+                  fontFamily: 'var(--font-unbounded)',
+                  background: report.monetizationReadiness.score >= 70 ? 'rgba(16,185,129,0.15)' : report.monetizationReadiness.score >= 40 ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)',
+                  color: report.monetizationReadiness.score >= 70 ? '#10b981' : report.monetizationReadiness.score >= 40 ? '#f59e0b' : '#ef4444',
+                  border: `1px solid ${report.monetizationReadiness.score >= 70 ? 'rgba(16,185,129,0.3)' : report.monetizationReadiness.score >= 40 ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                }}
+              >
                 {report.monetizationReadiness.score}
               </div>
-              <p className="text-xs text-gray-400 mt-1">Monetization<br/>readiness</p>
+              <p className="text-xs mt-1" style={{ color: '#8589b2' }}>Monetization<br/>readiness</p>
             </div>
           )}
         </div>
@@ -425,40 +436,38 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           ))}
         </div>
 
-        {/* Stack detail lines */}
         {(report.detectedStack.authDetails || report.detectedStack.paymentsDetails || report.detectedStack.dbDetails) && (
           <div className="space-y-1 mb-3">
             {report.detectedStack.authDetails && (
-              <p className="text-xs text-gray-500 flex gap-1.5"><span className="text-blue-400 shrink-0">🔐</span>{report.detectedStack.authDetails}</p>
+              <p className="text-xs flex gap-1.5" style={{ color: '#8589b2' }}><span className="shrink-0">🔐</span>{report.detectedStack.authDetails}</p>
             )}
             {report.detectedStack.paymentsDetails && (
-              <p className="text-xs text-gray-500 flex gap-1.5"><span className="text-emerald-400 shrink-0">💳</span>{report.detectedStack.paymentsDetails}</p>
+              <p className="text-xs flex gap-1.5" style={{ color: '#8589b2' }}><span className="shrink-0">💳</span>{report.detectedStack.paymentsDetails}</p>
             )}
             {report.detectedStack.dbDetails && (
-              <p className="text-xs text-gray-500 flex gap-1.5"><span className="text-violet-400 shrink-0">🗄️</span>{report.detectedStack.dbDetails}</p>
+              <p className="text-xs flex gap-1.5" style={{ color: '#8589b2' }}><span className="shrink-0">🗄️</span>{report.detectedStack.dbDetails}</p>
             )}
           </div>
         )}
 
-        {/* Monetization blockers + quick wins */}
         {report.monetizationReadiness && (
-          <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-gray-50">
+          <div className="grid grid-cols-2 gap-3 mt-4 pt-4" style={{ borderTop: '1px solid #1a1b2e' }}>
             <div>
-              <p className="text-xs font-semibold text-red-600 mb-2">🚧 Blockers before monetizing</p>
+              <p className="text-xs font-semibold mb-2" style={{ color: '#ef4444' }}>🚧 Blockers before monetizing</p>
               <ul className="space-y-1">
                 {report.monetizationReadiness.blockers.map((b, i) => (
-                  <li key={i} className="text-xs text-gray-600 flex gap-1.5">
-                    <span className="text-red-400 shrink-0">•</span>{b}
+                  <li key={i} className="text-xs flex gap-1.5" style={{ color: '#8589b2' }}>
+                    <span style={{ color: '#ef4444' }} className="shrink-0">•</span>{b}
                   </li>
                 ))}
               </ul>
             </div>
             <div>
-              <p className="text-xs font-semibold text-emerald-600 mb-2">⚡ Quick wins Prodify can inject</p>
+              <p className="text-xs font-semibold mb-2" style={{ color: '#10b981' }}>⚡ Quick wins Prodify can inject</p>
               <ul className="space-y-1">
                 {report.monetizationReadiness.quickWins.map((w, i) => (
-                  <li key={i} className="text-xs text-gray-600 flex gap-1.5">
-                    <span className="text-emerald-400 shrink-0">•</span>{w}
+                  <li key={i} className="text-xs flex gap-1.5" style={{ color: '#8589b2' }}>
+                    <span style={{ color: '#10b981' }} className="shrink-0">•</span>{w}
                   </li>
                 ))}
               </ul>
@@ -467,22 +476,23 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         )}
       </div>
 
-      {/* Conflicts / warnings */}
+      {/* Conflicts */}
       {report.conflicts.length > 0 && (
         <div className="space-y-2">
           {report.conflicts.map((c, i) => (
             <div
               key={i}
-              className={`rounded-xl p-4 flex gap-3 ${c.severity === 'blocker' ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200'}`}
+              className="rounded-xl p-4 flex gap-3"
+              style={c.severity === 'blocker' ? { background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)' } : { background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)' }}
             >
               <span className="text-lg shrink-0">{c.severity === 'blocker' ? '🚫' : '⚠️'}</span>
               <div className="flex-1">
-                <p className={`text-sm font-medium ${c.severity === 'blocker' ? 'text-red-800' : 'text-amber-800'}`}>{c.description}</p>
-                <p className={`text-xs mt-0.5 ${c.severity === 'blocker' ? 'text-red-600' : 'text-amber-600'}`}>Resolution: {c.resolution}</p>
+                <p className="text-sm font-medium" style={{ color: c.severity === 'blocker' ? '#ef4444' : '#f59e0b' }}>{c.description}</p>
+                <p className="text-xs mt-0.5" style={{ color: '#8589b2' }}>Resolution: {c.resolution}</p>
                 {c.affectedFiles && c.affectedFiles.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-2">
                     {c.affectedFiles.map(f => (
-                      <code key={f} className="text-xs bg-white border border-red-200 text-red-700 px-1.5 py-0.5 rounded">{f}</code>
+                      <code key={f} className="text-xs px-1.5 py-0.5 rounded" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', fontFamily: 'var(--font-geist-mono)' }}>{f}</code>
                     ))}
                   </div>
                 )}
@@ -494,31 +504,31 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
       {/* Code Insights */}
       {report.codeInsights && report.codeInsights.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 p-6">
-          <h3 className="font-semibold text-gray-900 mb-4">Code findings</h3>
+        <div className="p-6" style={{ background: 'rgba(27,30,61,0.5)', backdropFilter: 'blur(20px)', border: '1px solid #1a1b2e', borderRadius: '1rem' }}>
+          <h3 className="font-semibold mb-4" style={{ color: '#e3f4f8' }}>Code findings</h3>
           <div className="space-y-3">
             {report.codeInsights.map((insight, i) => {
-              const categoryColor: Record<string, string> = {
-                auth: 'bg-blue-50 border-blue-200 text-blue-700',
-                payments: 'bg-emerald-50 border-emerald-200 text-emerald-700',
-                database: 'bg-violet-50 border-violet-200 text-violet-700',
-                security: 'bg-red-50 border-red-200 text-red-700',
-                performance: 'bg-amber-50 border-amber-200 text-amber-700',
-                architecture: 'bg-gray-50 border-gray-200 text-gray-700',
+              const categoryStyle: Record<string, { bg: string; border: string; color: string }> = {
+                auth:         { bg: 'rgba(59,130,246,0.08)',  border: 'rgba(59,130,246,0.3)',  color: '#3b82f6' },
+                payments:     { bg: 'rgba(16,185,129,0.08)',  border: 'rgba(16,185,129,0.3)',  color: '#10b981' },
+                database:     { bg: 'rgba(87,94,254,0.08)',   border: 'rgba(87,94,254,0.3)',   color: '#575efe' },
+                security:     { bg: 'rgba(239,68,68,0.08)',   border: 'rgba(239,68,68,0.3)',   color: '#ef4444' },
+                performance:  { bg: 'rgba(245,158,11,0.08)',  border: 'rgba(245,158,11,0.3)',  color: '#f59e0b' },
+                architecture: { bg: 'rgba(133,137,178,0.08)', border: 'rgba(133,137,178,0.3)', color: '#8589b2' },
               };
               const categoryIcon: Record<string, string> = {
                 auth: '🔐', payments: '💳', database: '🗄️',
                 security: '🛡️', performance: '⚡', architecture: '🏗️',
               };
-              const colorClass = categoryColor[insight.category] ?? categoryColor.architecture;
+              const style = categoryStyle[insight.category] ?? categoryStyle.architecture;
               return (
-                <div key={i} className={`rounded-xl border p-4 ${colorClass}`}>
+                <div key={i} className="rounded-xl border p-4" style={{ background: style.bg, borderColor: style.border }}>
                   <div className="flex items-start gap-2">
                     <span className="text-base shrink-0">{categoryIcon[insight.category] ?? '🔍'}</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold mb-0.5">{insight.finding}</p>
-                      <p className="text-xs opacity-80 font-mono mb-1.5 truncate">{insight.evidence}</p>
-                      <p className="text-xs opacity-90">{insight.recommendation}</p>
+                      <p className="text-sm font-semibold mb-0.5" style={{ color: style.color }}>{insight.finding}</p>
+                      <p className="text-xs mb-1.5 truncate" style={{ color: '#8589b2', fontFamily: 'var(--font-geist-mono)' }}>{insight.evidence}</p>
+                      <p className="text-xs" style={{ color: '#e3f4f8' }}>{insight.recommendation}</p>
                     </div>
                   </div>
                 </div>
@@ -528,16 +538,16 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         </div>
       )}
 
-      {/* API Routes discovered */}
+      {/* API Routes */}
       {report.apiRoutes && report.apiRoutes.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 p-6">
-          <h3 className="font-semibold text-gray-900 mb-3">
+        <div className="p-6" style={{ background: 'rgba(27,30,61,0.5)', backdropFilter: 'blur(20px)', border: '1px solid #1a1b2e', borderRadius: '1rem' }}>
+          <h3 className="font-semibold mb-3" style={{ color: '#e3f4f8' }}>
             API routes found
-            <span className="ml-2 text-xs font-normal text-gray-400">({report.apiRoutes.length} total)</span>
+            <span className="ml-2 text-xs font-normal" style={{ color: '#8589b2' }}>({report.apiRoutes.length} total)</span>
           </h3>
           <div className="flex flex-wrap gap-1.5">
             {report.apiRoutes.map(route => (
-              <code key={route} className="text-xs bg-gray-50 border border-gray-200 text-gray-600 px-2 py-1 rounded-lg">
+              <code key={route} className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(87,94,254,0.08)', border: '1px solid rgba(87,94,254,0.2)', color: '#00d7ff', fontFamily: 'var(--font-geist-mono)' }}>
                 {route}
               </code>
             ))}
@@ -547,71 +557,74 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
       {/* Injection opportunities */}
       <div className="space-y-4">
-        <h3 className="font-semibold text-gray-900">What was / will be injected</h3>
-        {report.injectionOpportunities.map((opp, i) => (
-          <div key={i} className={`bg-white rounded-2xl border p-5 ${opp.canInject ? 'border-gray-100' : 'border-gray-100 opacity-60'}`}>
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-xl">{LAYER_ICONS[opp.layer] ?? '📦'}</span>
-              <span className="font-semibold text-gray-900 capitalize">{opp.layer}</span>
-              <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${EFFORT_COLOR[opp.effort] ?? 'text-gray-600 bg-gray-100'}`}>
-                {opp.effort} effort
-              </span>
-              {opp.canInject
-                ? <span className="text-xs text-emerald-600 font-medium bg-emerald-50 px-2 py-0.5 rounded-full">✓ Will inject</span>
-                : <span className="text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">Already present</span>
-              }
-            </div>
-            <div className="flex items-start gap-2 text-xs mb-3 p-3 bg-gray-50 rounded-xl">
-              <div className="flex-1">
-                <p className="text-gray-400 font-medium mb-0.5">CURRENT</p>
-                <p className="text-gray-600">{opp.currentState}</p>
+        <h3 className="font-semibold" style={{ color: '#e3f4f8' }}>What was / will be injected</h3>
+        {report.injectionOpportunities.map((opp, i) => {
+          const effortStyle = EFFORT_COLOR[opp.effort] ?? EFFORT_COLOR.medium;
+          return (
+            <div key={i} className="p-5" style={{ background: 'rgba(27,30,61,0.5)', backdropFilter: 'blur(20px)', border: '1px solid #1a1b2e', borderRadius: '1rem', opacity: opp.canInject ? 1 : 0.6 }}>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xl">{LAYER_ICONS[opp.layer] ?? '📦'}</span>
+                <span className="font-semibold capitalize" style={{ color: '#e3f4f8' }}>{opp.layer}</span>
+                <span className="ml-auto text-xs font-medium px-2 py-0.5 rounded-full" style={{ color: effortStyle.color, background: effortStyle.bg }}>
+                  {opp.effort} effort
+                </span>
+                {opp.canInject
+                  ? <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ color: '#10b981', background: 'rgba(16,185,129,0.12)' }}>✓ Will inject</span>
+                  : <span className="text-xs px-2 py-0.5 rounded-full" style={{ color: '#8589b2', background: 'rgba(133,137,178,0.1)' }}>Already present</span>
+                }
               </div>
-              <span className="text-gray-300 mt-4">→</span>
-              <div className="flex-1">
-                <p className="text-violet-500 font-medium mb-0.5">AFTER INJECTION</p>
-                <p className="text-gray-700">{opp.proposed}</p>
-              </div>
-            </div>
-            {opp.gaps && opp.gaps.length > 0 && (
-              <div className="mb-3">
-                <p className="text-xs font-semibold text-gray-500 mb-1.5">Missing pieces</p>
-                <ul className="space-y-1">
-                  {opp.gaps.map((gap, j) => (
-                    <li key={j} className="text-xs text-gray-600 flex gap-1.5">
-                      <span className="text-red-400 shrink-0">✗</span>{gap}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {opp.implementation && (
-              <div className="mb-3">
-                <p className="text-xs font-semibold text-gray-500 mb-1.5">What Prodify will build</p>
-                <p className="text-xs text-gray-600 leading-relaxed">{opp.implementation}</p>
-              </div>
-            )}
-            {opp.filesToCreate.length > 0 && (
-              <div className="mb-3">
-                <p className="text-xs font-semibold text-gray-500 mb-1.5">Files that will be created</p>
-                <div className="flex flex-wrap gap-1">
-                  {opp.filesToCreate.map(f => (
-                    <code key={f} className="text-xs bg-gray-50 border border-gray-200 text-gray-600 px-1.5 py-0.5 rounded">{f}</code>
-                  ))}
+              <div className="flex items-start gap-2 text-xs mb-3 p-3 rounded-xl" style={{ background: 'rgba(3,7,18,0.6)', border: '1px solid #1a1b2e' }}>
+                <div className="flex-1">
+                  <p className="font-medium mb-0.5" style={{ color: '#8589b2', fontFamily: 'var(--font-geist-mono)' }}>CURRENT</p>
+                  <p style={{ color: '#8589b2' }}>{opp.currentState}</p>
+                </div>
+                <span className="mt-4" style={{ color: '#323779' }}>→</span>
+                <div className="flex-1">
+                  <p className="font-medium mb-0.5" style={{ color: '#575efe', fontFamily: 'var(--font-geist-mono)' }}>AFTER INJECTION</p>
+                  <p style={{ color: '#e3f4f8' }}>{opp.proposed}</p>
                 </div>
               </div>
-            )}
-            {opp.envVarsNeeded && opp.envVarsNeeded.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-gray-500 mb-1.5">Env vars you'll need to add</p>
-                <div className="flex flex-wrap gap-1">
-                  {opp.envVarsNeeded.map(v => (
-                    <code key={v} className="text-xs bg-amber-50 border border-amber-200 text-amber-700 px-1.5 py-0.5 rounded">{v}</code>
-                  ))}
+              {opp.gaps && opp.gaps.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-xs font-semibold mb-1.5" style={{ color: '#8589b2' }}>Missing pieces</p>
+                  <ul className="space-y-1">
+                    {opp.gaps.map((gap, j) => (
+                      <li key={j} className="text-xs flex gap-1.5" style={{ color: '#8589b2' }}>
+                        <span style={{ color: '#ef4444' }} className="shrink-0">✗</span>{gap}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-              </div>
-            )}
-          </div>
-        ))}
+              )}
+              {opp.implementation && (
+                <div className="mb-3">
+                  <p className="text-xs font-semibold mb-1.5" style={{ color: '#8589b2' }}>What Prodify will build</p>
+                  <p className="text-xs leading-relaxed" style={{ color: '#e3f4f8' }}>{opp.implementation}</p>
+                </div>
+              )}
+              {opp.filesToCreate.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-xs font-semibold mb-1.5" style={{ color: '#8589b2' }}>Files that will be created</p>
+                  <div className="flex flex-wrap gap-1">
+                    {opp.filesToCreate.map(f => (
+                      <code key={f} className="text-xs px-1.5 py-0.5 rounded" style={{ background: 'rgba(87,94,254,0.08)', border: '1px solid rgba(87,94,254,0.2)', color: '#00d7ff', fontFamily: 'var(--font-geist-mono)' }}>{f}</code>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {opp.envVarsNeeded && opp.envVarsNeeded.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold mb-1.5" style={{ color: '#8589b2' }}>Env vars you&apos;ll need to add</p>
+                  <div className="flex flex-wrap gap-1">
+                    {opp.envVarsNeeded.map(v => (
+                      <code key={v} className="text-xs px-1.5 py-0.5 rounded" style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b', fontFamily: 'var(--font-geist-mono)' }}>{v}</code>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   ) : null;
@@ -620,7 +633,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     <div className="max-w-4xl">
       {/* Breadcrumb */}
       <div className="mb-6">
-        <Link href="/dashboard" className="text-sm text-gray-400 hover:text-gray-600 transition-colors">
+        <Link href="/dashboard" className="text-sm transition-colors" style={{ color: '#00d7ff' }}>
           ← All projects
         </Link>
       </div>
@@ -628,13 +641,19 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">{project.name}</h1>
+          <h1
+            className="text-2xl font-black mb-1"
+            style={{ fontFamily: 'var(--font-unbounded)', color: '#e3f4f8' }}
+          >
+            {project.name}
+          </h1>
           {project.repoFullName && (
             <a
               href={project.repoUrl ?? '#'}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm text-violet-600 hover:underline flex items-center gap-1"
+              className="text-sm flex items-center gap-1 transition-colors"
+              style={{ color: '#00d7ff' }}
             >
               <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
@@ -648,8 +667,11 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           <button
             onClick={() => void deleteProject()}
             disabled={deleting}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+            className="p-1.5 rounded-lg transition-colors disabled:opacity-50"
+            style={{ color: '#8589b2' }}
             title="Delete project"
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#ef4444'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(239,68,68,0.1)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#8589b2'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -660,26 +682,34 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
       {/* PENDING — needs analysis */}
       {(status === 'pending' || status === 'draft') && !analyzing && (
-        <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
-          <div className="w-14 h-14 bg-violet-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl">🔍</div>
-          <h2 className="font-semibold text-gray-900 mb-2">Ready to analyze</h2>
-          <p className="text-sm text-gray-500 mb-6 max-w-md mx-auto">
+        <div className="p-8 text-center" style={{ background: 'rgba(27,30,61,0.5)', backdropFilter: 'blur(20px)', border: '1px solid #1a1b2e', borderRadius: '1rem' }}>
+          <div
+            className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl"
+            style={{ background: 'rgba(87,94,254,0.1)', border: '1px solid rgba(87,94,254,0.3)' }}
+          >
+            🔍
+          </div>
+          <h2 className="font-semibold mb-2" style={{ color: '#e3f4f8' }}>Ready to analyze</h2>
+          <p className="text-sm mb-6 max-w-md mx-auto" style={{ color: '#8589b2' }}>
             Prodify will clone your repo and use AWS Bedrock (Claude) to detect your stack, find missing infrastructure, and plan exactly what to inject.
           </p>
-          <Button
+          <button
             onClick={() => void startAnalysis()}
-            className="bg-violet-600 hover:bg-violet-700 text-white"
+            className="py-2.5 px-6 rounded-full font-semibold text-sm transition-all duration-200"
+            style={{ background: '#575efe', color: '#ffffff', boxShadow: '0 0 20px rgba(87,94,254,0.4)' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 32px rgba(87,94,254,0.6)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 20px rgba(87,94,254,0.4)'; }}
           >
             Analyze repository
-          </Button>
+          </button>
         </div>
       )}
 
       {/* ANALYZING — progress stream */}
       {(status === 'analyzing' || analyzing) && (
-        <div className="bg-white rounded-2xl border border-gray-100 p-8">
-          <h2 className="font-semibold text-gray-900 mb-6 flex items-center gap-2">
-            <div className="w-4 h-4 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
+        <div className="p-8" style={{ background: 'rgba(27,30,61,0.5)', backdropFilter: 'blur(20px)', border: '1px solid #1a1b2e', borderRadius: '1rem' }}>
+          <h2 className="font-semibold mb-6 flex items-center gap-2" style={{ color: '#e3f4f8' }}>
+            <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#575efe', borderTopColor: 'transparent' }} />
             Analyzing repository...
           </h2>
           <div className="space-y-3">
@@ -693,12 +723,24 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               const active = analysisProgress.some(p => p.step === n);
               return (
                 <div key={n} className="flex items-center gap-3">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                    done ? 'bg-emerald-100 text-emerald-700' : active ? 'bg-violet-100 text-violet-700' : 'bg-gray-100 text-gray-400'
-                  }`}>
+                  <div
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                    style={
+                      done
+                        ? { background: 'rgba(16,185,129,0.15)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }
+                        : active
+                        ? { background: 'rgba(87,94,254,0.15)', color: '#575efe', border: '1px solid rgba(87,94,254,0.3)' }
+                        : { background: 'rgba(133,137,178,0.1)', color: '#8589b2', border: '1px solid #1a1b2e' }
+                    }
+                  >
                     {done ? '✓' : n}
                   </div>
-                  <span className={`text-sm ${done ? 'text-gray-700' : active ? 'text-violet-700 font-medium' : 'text-gray-400'}`}>{label}</span>
+                  <span
+                    className="text-sm"
+                    style={{ color: done ? '#e3f4f8' : active ? '#575efe' : '#8589b2', fontWeight: active ? 500 : 400 }}
+                  >
+                    {label}
+                  </span>
                 </div>
               );
             })}
@@ -712,8 +754,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           {reportContent}
 
           {/* Config form */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <h3 className="font-semibold text-gray-900 mb-4">Configure injection</h3>
+          <div className="p-6" style={{ background: 'rgba(27,30,61,0.5)', backdropFilter: 'blur(20px)', border: '1px solid #1a1b2e', borderRadius: '1rem' }}>
+            <h3 className="font-semibold mb-4" style={{ color: '#e3f4f8' }}>Configure injection</h3>
             <div className="space-y-5">
               <OptionGroup
                 label="Pricing model"
@@ -736,40 +778,44 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 onChange={v => setUserType(v as typeof userType)}
               />
               <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">After injection</p>
+                <p className="text-sm font-medium mb-2" style={{ color: '#e3f4f8' }}>After injection</p>
                 <div className="flex gap-3">
                   {[
                     { v: true, label: 'Open a PR to main', desc: 'Recommended — review before merge' },
-                    { v: false, label: 'Push branch only', desc: 'You\'ll open the PR manually' },
+                    { v: false, label: 'Push branch only', desc: "You'll open the PR manually" },
                   ].map(opt => (
                     <button
                       key={String(opt.v)}
                       onClick={() => setOpenPR(opt.v)}
-                      className={`flex-1 rounded-xl border p-3 text-left transition-all ${
+                      className="flex-1 rounded-xl p-3 text-left transition-all"
+                      style={
                         openPR === opt.v
-                          ? 'border-violet-500 bg-violet-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
+                          ? { border: '1px solid #575efe', background: 'rgba(87,94,254,0.1)' }
+                          : { border: '1px solid #323779', background: 'transparent' }
+                      }
                     >
-                      <p className="text-sm font-medium text-gray-900">{opt.label}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
+                      <p className="text-sm font-medium" style={{ color: '#e3f4f8' }}>{opt.label}</p>
+                      <p className="text-xs mt-0.5" style={{ color: '#8589b2' }}>{opt.desc}</p>
                     </button>
                   ))}
                 </div>
               </div>
             </div>
 
-            <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
-              <p className="text-xs text-gray-400">
-                Branch: <code className="font-mono">prodify/inject-{'<timestamp>'}</code>
+            <div className="mt-6 pt-4 flex items-center justify-between" style={{ borderTop: '1px solid #1a1b2e' }}>
+              <p className="text-xs" style={{ color: '#8589b2' }}>
+                Branch: <code style={{ fontFamily: 'var(--font-geist-mono)', color: '#00d7ff' }}>prodify/inject-{'<timestamp>'}</code>
               </p>
-              <Button
+              <button
                 onClick={() => void startInjection()}
-                className="bg-violet-600 hover:bg-violet-700 text-white"
                 disabled={report.conflicts.some(c => c.severity === 'blocker')}
+                className="py-2.5 px-6 rounded-full font-semibold text-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ background: '#575efe', color: '#ffffff', boxShadow: '0 0 20px rgba(87,94,254,0.4)' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 32px rgba(87,94,254,0.6)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 20px rgba(87,94,254,0.4)'; }}
               >
                 Inject now
-              </Button>
+              </button>
             </div>
           </div>
         </div>
@@ -777,28 +823,36 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
       {/* INJECTING — progress stream */}
       {injecting && (
-        <div className="bg-white rounded-2xl border border-gray-100 p-8">
-          <h2 className="font-semibold text-gray-900 mb-6 flex items-center gap-2">
-            <div className="w-4 h-4 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
+        <div className="p-8" style={{ background: 'rgba(27,30,61,0.5)', backdropFilter: 'blur(20px)', border: '1px solid #1a1b2e', borderRadius: '1rem' }}>
+          <h2 className="font-semibold mb-6 flex items-center gap-2" style={{ color: '#e3f4f8' }}>
+            <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#575efe', borderTopColor: 'transparent' }} />
             Injecting infrastructure...
           </h2>
           <div className="space-y-3">
             {injectProgress.map((p, i) => (
               <div key={i} className="flex items-center gap-3">
-                <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold shrink-0">✓</div>
-                <span className="text-sm text-gray-700">{p.message}</span>
+                <div
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                  style={{ background: 'rgba(16,185,129,0.15)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}
+                >
+                  ✓
+                </div>
+                <span className="text-sm" style={{ color: '#e3f4f8' }}>{p.message}</span>
               </div>
             ))}
             {injectProgress.length > 0 && (
               <div className="flex items-center gap-3">
-                <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center shrink-0">
-                  <div className="w-3 h-3 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
+                <div
+                  className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
+                  style={{ background: 'rgba(87,94,254,0.15)', border: '1px solid rgba(87,94,254,0.3)' }}
+                >
+                  <div className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#575efe', borderTopColor: 'transparent' }} />
                 </div>
-                <span className="text-sm text-violet-700 font-medium">Working...</span>
+                <span className="text-sm font-medium" style={{ color: '#575efe' }}>Working...</span>
               </div>
             )}
           </div>
-          {injectError && <p className="text-sm text-red-600 mt-4">{injectError}</p>}
+          {injectError && <p className="text-sm mt-4" style={{ color: '#ef4444' }}>{injectError}</p>}
         </div>
       )}
 
@@ -806,7 +860,10 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       {status === 'injected' && !injecting && (
         <div className="space-y-6">
           {/* Tab bar */}
-          <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+          <div
+            className="flex gap-1 p-1 rounded-xl w-fit"
+            style={{ background: 'rgba(27,30,61,0.8)', border: '1px solid #1a1b2e' }}
+          >
             {([
               { key: 'status', label: '🎉 Injection status' },
               { key: 'report', label: '🔍 Analysis report' },
@@ -814,11 +871,12 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               <button
                 key={tab.key}
                 onClick={() => setViewMode(tab.key)}
-                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                className="px-4 py-1.5 rounded-lg text-sm font-medium transition-all"
+                style={
                   viewMode === tab.key
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
+                    ? { background: 'rgba(87,94,254,0.2)', color: '#e3f4f8', border: '1px solid rgba(87,94,254,0.3)' }
+                    : { color: '#8589b2', border: '1px solid transparent' }
+                }
               >
                 {tab.label}
               </button>
@@ -828,12 +886,15 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           {/* Status tab */}
           {viewMode === 'status' && (
             <div className="space-y-6">
-              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6">
+              <div
+                className="rounded-2xl p-6"
+                style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.3)' }}
+              >
                 <div className="flex items-center gap-3 mb-3">
                   <span className="text-2xl">🎉</span>
-                  <h2 className="font-semibold text-emerald-900">Infrastructure injected successfully</h2>
+                  <h2 className="font-semibold" style={{ color: '#10b981' }}>Infrastructure injected successfully</h2>
                 </div>
-                <p className="text-sm text-emerald-700 mb-4">
+                <p className="text-sm mb-4" style={{ color: '#8589b2' }}>
                   Auth, payments, and database infrastructure have been injected and pushed to GitHub.
                 </p>
                 {project.prUrl && (
@@ -841,20 +902,21 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                     href={project.prUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 bg-white border border-emerald-300 text-emerald-800 text-sm font-medium px-4 py-2 rounded-lg hover:bg-emerald-50 transition-colors"
+                    className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-full transition-all"
+                    style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.4)', color: '#10b981', boxShadow: '0 0 12px rgba(16,185,129,0.2)' }}
                   >
                     View PR on GitHub →
                   </a>
                 )}
                 {project.branchName && (
-                  <p className="text-xs text-emerald-600 mt-2">
-                    Branch: <code className="font-mono">{project.branchName}</code>
+                  <p className="text-xs mt-2" style={{ color: '#8589b2' }}>
+                    Branch: <code style={{ fontFamily: 'var(--font-geist-mono)', color: '#00d7ff' }}>{project.branchName}</code>
                   </p>
                 )}
               </div>
 
-              <div className="bg-white rounded-2xl border border-gray-100 p-6">
-                <h3 className="font-semibold text-gray-900 mb-4">Next steps</h3>
+              <div className="p-6" style={{ background: 'rgba(27,30,61,0.5)', backdropFilter: 'blur(20px)', border: '1px solid #1a1b2e', borderRadius: '1rem' }}>
+                <h3 className="font-semibold mb-4" style={{ color: '#e3f4f8' }}>Next steps</h3>
                 <ol className="space-y-3">
                   {[
                     'Review the PR — check every file before merging',
@@ -863,8 +925,11 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                     'Merge the PR to main',
                     'Set up Stripe webhook: stripe listen --forward-to localhost:3000/api/webhooks/stripe',
                   ].map((text, i) => (
-                    <li key={i} className="flex items-start gap-3 text-sm text-gray-600">
-                      <span className="w-5 h-5 rounded border border-gray-300 shrink-0 mt-0.5" />
+                    <li key={i} className="flex items-start gap-3 text-sm" style={{ color: '#8589b2' }}>
+                      <span
+                        className="w-5 h-5 rounded shrink-0 mt-0.5 flex items-center justify-center text-xs"
+                        style={{ border: '1px solid #323779', color: '#8589b2' }}
+                      />
                       {text}
                     </li>
                   ))}
@@ -873,17 +938,18 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
               {/* Re-inject config — shown inline without re-running analysis */}
               {showReinjecting && (
-                <div className="bg-white rounded-2xl border border-violet-200 p-6">
+                <div className="p-6" style={{ background: 'rgba(27,30,61,0.5)', backdropFilter: 'blur(20px)', border: '1px solid rgba(87,94,254,0.3)', borderRadius: '1rem' }}>
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-gray-900">Re-inject with new config</h3>
+                    <h3 className="font-semibold" style={{ color: '#e3f4f8' }}>Re-inject with new config</h3>
                     <button
                       onClick={() => setShowReinjecting(false)}
-                      className="text-gray-400 hover:text-gray-600 text-sm"
+                      className="text-sm transition-colors"
+                      style={{ color: '#8589b2' }}
                     >
                       ✕ Cancel
                     </button>
                   </div>
-                  <p className="text-xs text-gray-500 mb-5">
+                  <p className="text-xs mb-5" style={{ color: '#8589b2' }}>
                     Uses the existing analysis — no re-scan needed. Creates a new branch on GitHub.
                   </p>
                   <div className="space-y-5">
@@ -908,7 +974,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                       onChange={v => setUserType(v as typeof userType)}
                     />
                     <div>
-                      <p className="text-sm font-medium text-gray-700 mb-2">After injection</p>
+                      <p className="text-sm font-medium mb-2" style={{ color: '#e3f4f8' }}>After injection</p>
                       <div className="flex gap-3">
                         {[
                           { v: true, label: 'Open a PR to main', desc: 'Recommended — review before merge' },
@@ -917,49 +983,68 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                           <button
                             key={String(opt.v)}
                             onClick={() => setOpenPR(opt.v)}
-                            className={`flex-1 rounded-xl border p-3 text-left transition-all ${
+                            className="flex-1 rounded-xl p-3 text-left transition-all"
+                            style={
                               openPR === opt.v
-                                ? 'border-violet-500 bg-violet-50'
-                                : 'border-gray-200 hover:border-gray-300'
-                            }`}
+                                ? { border: '1px solid #575efe', background: 'rgba(87,94,254,0.1)' }
+                                : { border: '1px solid #323779', background: 'transparent' }
+                            }
                           >
-                            <p className="text-sm font-medium text-gray-900">{opt.label}</p>
-                            <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
+                            <p className="text-sm font-medium" style={{ color: '#e3f4f8' }}>{opt.label}</p>
+                            <p className="text-xs mt-0.5" style={{ color: '#8589b2' }}>{opt.desc}</p>
                           </button>
                         ))}
                       </div>
                     </div>
                   </div>
-                  <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
-                    <p className="text-xs text-gray-400">
-                      Branch: <code className="font-mono">prodify/inject-{'<timestamp>'}</code>
+                  <div className="mt-6 pt-4 flex items-center justify-between" style={{ borderTop: '1px solid #1a1b2e' }}>
+                    <p className="text-xs" style={{ color: '#8589b2' }}>
+                      Branch: <code style={{ fontFamily: 'var(--font-geist-mono)', color: '#00d7ff' }}>prodify/inject-{'<timestamp>'}</code>
                     </p>
-                    <Button
+                    <button
                       onClick={() => { setShowReinjecting(false); void startInjection(); }}
-                      className="bg-violet-600 hover:bg-violet-700 text-white"
+                      className="py-2.5 px-6 rounded-full font-semibold text-sm transition-all duration-200"
+                      style={{ background: '#575efe', color: '#ffffff', boxShadow: '0 0 20px rgba(87,94,254,0.4)' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 32px rgba(87,94,254,0.6)'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 20px rgba(87,94,254,0.4)'; }}
                     >
                       Inject now
-                    </Button>
+                    </button>
                   </div>
                 </div>
               )}
 
               <div className="flex gap-3 flex-wrap">
                 {!showReinjecting && (
-                  <Button
+                  <button
                     onClick={() => setShowReinjecting(true)}
-                    className="bg-violet-600 hover:bg-violet-700 text-white"
+                    className="py-2.5 px-5 rounded-full font-semibold text-sm transition-all duration-200"
+                    style={{ background: '#575efe', color: '#ffffff', boxShadow: '0 0 20px rgba(87,94,254,0.4)' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 32px rgba(87,94,254,0.6)'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 20px rgba(87,94,254,0.4)'; }}
                   >
                     Re-inject
-                  </Button>
+                  </button>
                 )}
-                <Button variant="outline" onClick={() => void startAnalysis()}>
+                <button
+                  onClick={() => void startAnalysis()}
+                  className="py-2.5 px-5 rounded-full font-semibold text-sm transition-all"
+                  style={{ border: '1px solid #323779', color: '#e3f4f8', background: 'transparent' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#575efe'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#323779'; }}
+                >
                   Re-analyze
-                </Button>
+                </button>
                 {report && (
-                  <Button variant="outline" onClick={() => setViewMode('report')}>
+                  <button
+                    onClick={() => setViewMode('report')}
+                    className="py-2.5 px-5 rounded-full font-semibold text-sm transition-all"
+                    style={{ border: '1px solid #323779', color: '#e3f4f8', background: 'transparent' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#575efe'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#323779'; }}
+                  >
                     View analysis report
-                  </Button>
+                  </button>
                 )}
               </div>
             </div>
@@ -970,12 +1055,24 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             <div className="space-y-6">
               {reportContent}
               <div className="flex gap-3">
-                <Button variant="outline" onClick={() => setViewMode('status')}>
+                <button
+                  onClick={() => setViewMode('status')}
+                  className="py-2.5 px-5 rounded-full font-semibold text-sm transition-all"
+                  style={{ border: '1px solid #323779', color: '#e3f4f8', background: 'transparent' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#575efe'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#323779'; }}
+                >
                   ← Back to status
-                </Button>
-                <Button variant="outline" onClick={() => void startAnalysis()}>
+                </button>
+                <button
+                  onClick={() => void startAnalysis()}
+                  className="py-2.5 px-5 rounded-full font-semibold text-sm transition-all"
+                  style={{ border: '1px solid #323779', color: '#e3f4f8', background: 'transparent' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#575efe'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#323779'; }}
+                >
                   Re-analyze
-                </Button>
+                </button>
               </div>
             </div>
           )}
@@ -984,12 +1081,21 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
       {/* ERROR */}
       {status === 'error' && !analyzing && (
-        <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
-          <h2 className="font-semibold text-red-900 mb-2">Something went wrong</h2>
-          <p className="text-sm text-red-600 mb-4">The analysis or injection failed. Check your GitHub connection and try again.</p>
-          <Button onClick={() => void startAnalysis()} className="bg-red-600 hover:bg-red-700 text-white">
+        <div
+          className="rounded-2xl p-6"
+          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)' }}
+        >
+          <h2 className="font-semibold mb-2" style={{ color: '#ef4444' }}>Something went wrong</h2>
+          <p className="text-sm mb-4" style={{ color: '#8589b2' }}>The analysis or injection failed. Check your GitHub connection and try again.</p>
+          <button
+            onClick={() => void startAnalysis()}
+            className="py-2.5 px-5 rounded-full font-semibold text-sm transition-all"
+            style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.4)' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(239,68,68,0.25)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(239,68,68,0.15)'; }}
+          >
             Try again
-          </Button>
+          </button>
         </div>
       )}
     </div>
@@ -997,31 +1103,39 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; classes: string }> = {
-    draft:     { label: 'Draft',     classes: 'bg-gray-100 text-gray-500' },
-    pending:   { label: 'Pending',   classes: 'bg-amber-100 text-amber-700' },
-    analyzing: { label: 'Analyzing', classes: 'bg-blue-100 text-blue-700' },
-    analyzed:  { label: 'Ready',     classes: 'bg-violet-100 text-violet-700' },
-    injecting: { label: 'Injecting', classes: 'bg-blue-100 text-blue-700' },
-    injected:  { label: 'Injected',  classes: 'bg-emerald-100 text-emerald-700' },
-    error:     { label: 'Error',     classes: 'bg-red-100 text-red-700' },
+  const map: Record<string, { label: string; color: string; bg: string; glow: string }> = {
+    draft:     { label: 'Draft',     color: '#8589b2', bg: 'rgba(133,137,178,0.12)', glow: 'transparent' },
+    pending:   { label: 'Pending',   color: '#f59e0b', bg: 'rgba(245,158,11,0.12)',  glow: 'rgba(245,158,11,0.2)' },
+    analyzing: { label: 'Analyzing', color: '#3b82f6', bg: 'rgba(59,130,246,0.12)',  glow: 'rgba(59,130,246,0.2)' },
+    analyzed:  { label: 'Ready',     color: '#575efe', bg: 'rgba(87,94,254,0.12)',   glow: 'rgba(87,94,254,0.2)' },
+    injecting: { label: 'Injecting', color: '#00d7ff', bg: 'rgba(0,215,255,0.12)',   glow: 'rgba(0,215,255,0.2)' },
+    injected:  { label: 'Injected',  color: '#10b981', bg: 'rgba(16,185,129,0.12)',  glow: 'rgba(16,185,129,0.2)' },
+    error:     { label: 'Error',     color: '#ef4444', bg: 'rgba(239,68,68,0.12)',   glow: 'rgba(239,68,68,0.2)' },
   };
   const cfg = map[status] ?? map.draft;
   return (
-    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${cfg.classes}`}>
+    <span
+      className="text-xs font-semibold px-2.5 py-1 rounded-full"
+      style={{ color: cfg.color, background: cfg.bg, boxShadow: `0 0 8px ${cfg.glow}` }}
+    >
       {cfg.label}
     </span>
   );
 }
 
 function StackBadge({ label, color = 'gray' }: { label: string; color?: 'gray' | 'amber' | 'red' }) {
-  const classes = {
-    gray: 'bg-gray-100 text-gray-600',
-    amber: 'bg-amber-100 text-amber-700',
-    red: 'bg-red-100 text-red-600',
+  const styles = {
+    gray:  { color: '#8589b2', background: 'rgba(133,137,178,0.1)', border: '1px solid rgba(133,137,178,0.2)' },
+    amber: { color: '#f59e0b', background: 'rgba(245,158,11,0.1)',  border: '1px solid rgba(245,158,11,0.2)' },
+    red:   { color: '#ef4444', background: 'rgba(239,68,68,0.1)',   border: '1px solid rgba(239,68,68,0.2)' },
   };
   return (
-    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${classes[color]}`}>{label}</span>
+    <span
+      className="text-xs font-medium px-2 py-0.5 rounded-full"
+      style={styles[color]}
+    >
+      {label}
+    </span>
   );
 }
 
@@ -1035,20 +1149,21 @@ function OptionGroup({
 }) {
   return (
     <div>
-      <p className="text-sm font-medium text-gray-700 mb-2">{label}</p>
+      <p className="text-sm font-medium mb-2" style={{ color: '#e3f4f8' }}>{label}</p>
       <div className="flex gap-3">
         {options.map(opt => (
           <button
             key={opt.value}
             onClick={() => onChange(opt.value)}
-            className={`flex-1 rounded-xl border p-3 text-left transition-all ${
+            className="flex-1 rounded-xl p-3 text-left transition-all"
+            style={
               value === opt.value
-                ? 'border-violet-500 bg-violet-50'
-                : 'border-gray-200 hover:border-gray-300'
-            }`}
+                ? { border: '1px solid #575efe', background: 'rgba(87,94,254,0.1)' }
+                : { border: '1px solid #323779', background: 'transparent' }
+            }
           >
-            <p className="text-sm font-medium text-gray-900">{opt.label}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
+            <p className="text-sm font-medium" style={{ color: '#e3f4f8' }}>{opt.label}</p>
+            <p className="text-xs mt-0.5" style={{ color: '#8589b2' }}>{opt.desc}</p>
           </button>
         ))}
       </div>

@@ -16,6 +16,7 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "@prisma/client": "^5.22.0"
+    "@prisma/client": "^5.22.0",
+    "supermemory": "^4.21.1"
   }
 }

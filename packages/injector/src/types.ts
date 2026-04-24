@@ -15,6 +15,7 @@ export interface ProdifyAnswers {
   pricingModel: PricingModel;
   userType: UserType;
   stack: StackType;
+  autoDeploy?: boolean;
 }
 
 // ─── Runtime Config ───────────────────────────────────────────────────────────

@@ -19,7 +19,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@prodify/injector/*": ["../../packages/injector/*"]
     }
   },
   "include": [

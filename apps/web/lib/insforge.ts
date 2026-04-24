@@ -7,9 +7,9 @@ const globalForInsforge = globalThis as unknown as {
 
 function makeInsforgeClient() {
   return createClient({
-    baseUrl: process.env.INSFORGE_URL!,
-    anonKey: process.env.INSFORGE_ANON_KEY,
-    isServerMode: true, // we're always server-side in Next.js API routes
+    baseUrl: (process.env.INSFORGE_URL ?? process.env.NEXT_PUBLIC_INSFORGE_URL)!,
+    anonKey: process.env.INSFORGE_ANON_KEY ?? process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY,
+    isServerMode: true,
   });
 }
 

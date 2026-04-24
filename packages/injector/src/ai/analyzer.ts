@@ -368,7 +368,20 @@ async function invokeBedrock(modelId: string, prompt: string, maxTokens: number)
 
 function parseJson<T>(text: string): T {
   const clean = text.replace(/```json\n?|\n?```/g, '').trim();
-  return JSON.parse(clean) as T;
+  try {
+    return JSON.parse(clean) as T;
+  } catch (err) {
+    if (err instanceof SyntaxError) {
+      // AI response was cut off mid-JSON — output exceeded Bedrock's max_tokens limit.
+      // Surface a clear error so the UI shows a useful message instead of a raw crash.
+      throw new Error(
+        `AI response was truncated (output exceeded token limit). ` +
+        `Try analyzing a smaller repository, or re-run the analysis. ` +
+        `Original parse error: ${err.message}`
+      );
+    }
+    throw err;
+  }
 }
 
 // ─── Phase 2: Haiku — App Understanding (~0.002¢) ────────────────────────────
@@ -601,6 +614,18 @@ async function runSonnetPhase(
   }, null, 2);
 
   const prompt = `You are a senior full-stack engineer and SaaS monetization expert auditing a GitHub repository. Every claim must be grounded in the actual code provided below.
+
+CRITICAL — RESPONSE SIZE CONSTRAINTS (strictly enforced, non-negotiable):
+- Keep ALL string values extremely concise — maximum 1-2 short sentences each.
+- "implementation" fields: max 2 sentences. No multi-paragraph descriptions.
+- "gaps" arrays: max 3 items per layer.
+- "filesToCreate" arrays: max 4 files per layer.
+- "codeInsights": max 5 total insights.
+- "otherDependencies": max 5 items.
+- "blockers" and "quickWins": max 3 items each.
+- Your ENTIRE JSON response MUST fit within 4000 tokens. When in doubt, be shorter.
+
+IMPORTANT — TRUNCATED FILES: Some source files below may be truncated. If a file is cut off, do NOT conclude a feature is absent — the implementation may exist beyond the truncated section.
 
 === PHASE 1 FINGERPRINT (pre-computed, trust this) ===
 ${fingerprintJson}

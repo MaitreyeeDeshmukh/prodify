@@ -194,7 +194,7 @@ async function discoverAndReadApiRoutes(dir: string): Promise<{ paths: string[];
         } else if (/\.(ts|js|tsx|jsx)$/.test(entry.name)) {
           const rel = path.relative(dir, fullPath);
           paths.push(rel);
-          const content = await readFileSafe(fullPath, 500);
+          const content = await readFileSafe(fullPath, 3000);
           if (content) contentParts.push(`\n--- ${rel} ---\n${content}`);
         }
       }
@@ -488,6 +488,17 @@ async function buildTargetedContext(
       { path: 'lib/auth.ts', maxChars: 4000 },
       { path: 'lib/auth.js', maxChars: 4000 },
       { path: 'src/lib/auth.ts', maxChars: 4000 },
+      { path: 'src/lib/auth.js', maxChars: 4000 },
+      // Auth context providers (common pattern in Supabase-based apps)
+      { path: 'src/lib/auth-context.tsx', maxChars: 3000 },
+      { path: 'src/lib/auth-context.ts', maxChars: 3000 },
+      { path: 'lib/auth-context.tsx', maxChars: 3000 },
+      { path: 'lib/auth-context.ts', maxChars: 3000 },
+      // Sign-in pages (confirms auth flow exists)
+      { path: 'src/app/signin/page.tsx', maxChars: 2000 },
+      { path: 'app/signin/page.tsx', maxChars: 2000 },
+      { path: 'src/app/login/page.tsx', maxChars: 2000 },
+      { path: 'app/login/page.tsx', maxChars: 2000 },
       { path: 'app/api/auth/[...nextauth]/route.ts', maxChars: 4000 },
       { path: 'pages/api/auth/[...nextauth].ts', maxChars: 4000 },
       { path: 'middleware.ts', maxChars: 3000 },
@@ -512,6 +523,11 @@ async function buildTargetedContext(
       { path: 'lib/prisma.ts', maxChars: 2000 },
       { path: 'lib/supabase.ts', maxChars: 3000 },
       { path: 'src/lib/db.ts', maxChars: 3000 },
+      // Raw SQL schema files (used in Supabase-first apps without an ORM)
+      { path: 'supabase.sql', maxChars: 4000 },
+      { path: 'schema.sql', maxChars: 4000 },
+      { path: 'supabase/schema.sql', maxChars: 4000 },
+      { path: 'db/schema.sql', maxChars: 4000 },
     ],
     ci: [
       { path: '.github/workflows/ci.yml', maxChars: 2000 },
@@ -603,6 +619,8 @@ The detectedStack values for hasAuth/hasPayments/hasDatabase/hasCI can be inferr
 1. Specific code-level insights (bugs, gaps, partial impls) found in the source files above
 2. Detailed injection plans for the focusLayers: ${haiku.focusLayers.join(', ')}
 3. Conflict detection between existing code and proposed injections
+
+IMPORTANT — TRUNCATED FILES: Some source files below may be truncated (shown as partial content). If a file is cut off, do NOT conclude that a feature is absent — the implementation may exist beyond the truncated section. Only flag something as missing if there is no evidence of it anywhere in the provided context.
 
 DETECTION RULES — only mark as present with concrete fingerprint/code evidence:
 - hasAuth: fingerprint.deps.hasNextAuth/hasClerk/hasBetterAuth, OR auth route file with actual handler code

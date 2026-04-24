@@ -9,7 +9,7 @@ describe('buildPaymentsFiles', () => {
     expect(paths).toContain('prodify-layer/payments/stripe.ts');
     expect(paths).toContain('prodify-layer/routes/api/checkout/route.ts');
     expect(paths).toContain('prodify-layer/routes/api/webhooks/stripe/route.ts');
-    expect(paths).toContain('prodify-layer/routes/api/portal/route.ts');
+    expect(paths).toContain('prodify-layer/routes/api/billing/portal/route.ts');
 
     const stripe = files.find(f => f.relativePath === 'prodify-layer/payments/stripe.ts')!;
     expect(stripe.content).toContain('Stripe');

@@ -13,7 +13,7 @@ function perSeatStripe(): string {
 import Stripe from 'stripe';
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-04-10',
+  apiVersion: '2025-03-31.basil',
 });
 
 /** Create a checkout session for per-seat billing */
@@ -47,7 +47,7 @@ function flatStripe(): string {
 import Stripe from 'stripe';
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-04-10',
+  apiVersion: '2025-03-31.basil',
 });
 
 /** Create a checkout session for a flat subscription */
@@ -74,7 +74,7 @@ function usageStripe(): string {
 import Stripe from 'stripe';
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-04-10',
+  apiVersion: '2025-03-31.basil',
 });
 
 /** Create a checkout session for metered (usage-based) billing */
@@ -119,6 +119,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/prodify-layer/auth/[...nextauth]';
 import { stripe } from '@/prodify-layer/payments/stripe';
+import { insforge } from '@/lib/insforge';
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -127,18 +128,45 @@ export async function POST(req: Request) {
   }
 
   const { priceId, quantity } = await req.json() as { priceId: string; quantity?: number };
-  const origin = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+  // Use request origin so success/cancel URLs work on any domain (local, preview, prod)
+  const origin = req.headers.get('origin')
+    ?? process.env.NEXT_PUBLIC_APP_URL
+    ?? 'http://localhost:3000';
 
-  // TODO: look up Stripe customerId from DB using session.user.id
-  const customerId = 'cus_placeholder';
+  // Re-use existing Stripe customer to prevent duplicates
+  const { data: dbUser } = await insforge.database
+    .from('users')
+    .select('stripe_customer_id')
+    .eq('id', session.user.id)
+    .single();
+
+  let customerId = dbUser?.stripe_customer_id as string | null;
+
+  if (!customerId) {
+    const customer = await stripe.customers.create({
+      email: session.user.email ?? undefined,
+      metadata: { user_id: session.user.id },
+    });
+    customerId = customer.id;
+    await insforge.database
+      .from('users')
+      .update({ stripe_customer_id: customerId })
+      .eq('id', session.user.id);
+  }
 
   const checkoutSession = await stripe.checkout.sessions.create({
     customer: customerId,
     mode: 'subscription',
     line_items: [{ price: priceId, quantity: quantity ?? 1 }],
-    success_url: \`\${origin}/dashboard?success=1\`,
-    cancel_url: \`\${origin}/pricing?canceled=1\`,
+    metadata: { user_id: session.user.id },
+    allow_promotion_codes: true,
+    success_url: \`\${origin}/dashboard?checkout=success\`,
+    cancel_url: \`\${origin}/pricing?checkout=canceled\`,
   });
+
+  if (!checkoutSession.url) {
+    return NextResponse.json({ error: 'Failed to create checkout session' }, { status: 500 });
+  }
 
   return NextResponse.json({ url: checkoutSession.url });
 }
@@ -146,6 +174,14 @@ export async function POST(req: Request) {
 
 const webhookRoute = `// prodify-layer/routes/api/webhooks/stripe/route.ts
 // Drop into app/api/webhooks/stripe/route.ts
+//
+// Required Stripe events to enable in your dashboard:
+//   checkout.session.completed
+//   invoice.payment_succeeded
+//   invoice.payment_failed
+//   customer.subscription.updated
+//   customer.subscription.deleted
+//   customer.subscription.trial_will_end
 import { NextResponse } from 'next/server';
 import { stripe } from '@/prodify-layer/payments/stripe';
 import { insforge } from '@/lib/insforge';
@@ -160,48 +196,124 @@ export async function POST(req: Request) {
 
   let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(
-      body,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET!,
-    );
+    event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
   } catch (err) {
+    console.error('[stripe/webhook] signature verification failed:', err);
     return NextResponse.json({ error: 'Webhook signature failed' }, { status: 400 });
   }
 
-  // Persist raw event for idempotency / replay
-  await insforge.database
+  // ── Idempotency: store raw event BEFORE any business logic ─────────────────
+  const { error: upsertError } = await insforge.database
     .from('webhook_events')
     .upsert(
-      { stripe_event_id: event.id, type: event.type, payload: JSON.stringify(event) },
+      { stripe_event_id: event.id, type: event.type, payload: event },
       { onConflict: 'stripe_event_id' },
     );
+  if (upsertError) {
+    console.error('[stripe/webhook] failed to store event:', upsertError.message);
+    return NextResponse.json({ error: 'Event storage failed' }, { status: 500 });
+  }
 
-  switch (event.type) {
-    case 'checkout.session.completed': {
-      const session = event.data.object as Stripe.Checkout.Session;
-      // TODO: provision access, update subscription status in DB
-      console.log('Checkout complete:', session.id);
-      break;
+  try {
+    switch (event.type) {
+      // ── User completes checkout ─────────────────────────────────────────────
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const userId = session.metadata?.user_id;
+        const customerId = session.customer as string | null;
+        if (userId && customerId) {
+          await insforge.database.from('users').update({
+            stripe_customer_id: customerId,
+            subscription_tier: 'pro',
+            subscription_status: 'active',
+          }).eq('id', userId);
+        }
+        break;
+      }
+
+      // ── Recurring payment succeeded — extend access ─────────────────────────
+      case 'invoice.payment_succeeded': {
+        const invoice = event.data.object as Stripe.Invoice;
+        const customerId = invoice.customer as string | null;
+        const subscriptionId = invoice.subscription as string | null;
+        if (customerId && subscriptionId) {
+          const sub = await stripe.subscriptions.retrieve(subscriptionId);
+          await insforge.database.from('users').update({
+            subscription_status: 'active',
+            current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
+          }).eq('stripe_customer_id', customerId);
+        }
+        break;
+      }
+
+      // ── Payment failed — mark past_due ──────────────────────────────────────
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object as Stripe.Invoice;
+        const customerId = invoice.customer as string | null;
+        if (customerId) {
+          await insforge.database.from('users').update({
+            subscription_status: 'past_due',
+          }).eq('stripe_customer_id', customerId);
+          // TODO: trigger dunning email via your email provider
+        }
+        break;
+      }
+
+      // ── Subscription updated — plan change, pause, trial end ────────────────
+      case 'customer.subscription.updated': {
+        const sub = event.data.object as Stripe.Subscription;
+        const customerId = sub.customer as string | null;
+        if (customerId) {
+          await insforge.database.from('users').update({
+            subscription_status: sub.status,
+            current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
+          }).eq('stripe_customer_id', customerId);
+        }
+        break;
+      }
+
+      // ── Subscription cancelled — downgrade to free ──────────────────────────
+      case 'customer.subscription.deleted': {
+        const sub = event.data.object as Stripe.Subscription;
+        const customerId = sub.customer as string | null;
+        if (customerId) {
+          await insforge.database.from('users').update({
+            subscription_tier: 'free',
+            subscription_status: 'canceled',
+            current_period_end: null,
+          }).eq('stripe_customer_id', customerId);
+        }
+        break;
+      }
+
+      // ── Trial ending in 3 days ──────────────────────────────────────────────
+      case 'customer.subscription.trial_will_end': {
+        const sub = event.data.object as Stripe.Subscription;
+        // TODO: send trial expiry email
+        console.log('[stripe/webhook] trial ending for subscription:', sub.id);
+        break;
+      }
+
+      default:
+        break;
     }
-    case 'customer.subscription.deleted': {
-      const sub = event.data.object as Stripe.Subscription;
-      // TODO: revoke access in DB
-      console.log('Subscription cancelled:', sub.id);
-      break;
-    }
+  } catch (err) {
+    console.error(\`[stripe/webhook] handler error for \${event.type}:\`, err);
+    return NextResponse.json({ error: 'Handler error' }, { status: 500 });
   }
 
   return NextResponse.json({ received: true });
 }
 `;
 
-const portalRoute = `// prodify-layer/routes/api/portal/route.ts
-// Drop into app/api/portal/route.ts — Stripe Customer Portal redirect
+const portalRoute = `// prodify-layer/routes/api/billing/portal/route.ts
+// Drop into app/api/billing/portal/route.ts — Stripe Customer Portal redirect
+// Lets users cancel, update payment method, or change plan without contacting support.
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/prodify-layer/auth/[...nextauth]';
 import { stripe } from '@/prodify-layer/payments/stripe';
+import { insforge } from '@/lib/insforge';
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -209,10 +321,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const origin = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+  const { data: dbUser } = await insforge.database
+    .from('users')
+    .select('stripe_customer_id')
+    .eq('id', session.user.id)
+    .single();
 
-  // TODO: look up Stripe customerId from DB using session.user.id
-  const customerId = 'cus_placeholder';
+  const customerId = dbUser?.stripe_customer_id as string | null;
+  if (!customerId) {
+    return NextResponse.json(
+      { error: 'No billing account found. Please subscribe first.' },
+      { status: 400 },
+    );
+  }
+
+  const origin = req.headers.get('origin')
+    ?? process.env.NEXT_PUBLIC_APP_URL
+    ?? 'http://localhost:3000';
 
   const portalSession = await stripe.billingPortal.sessions.create({
     customer: customerId,
@@ -237,6 +362,6 @@ export function buildPaymentsFiles(pricingModel: PricingModel): FileEntry[] {
     { relativePath: 'prodify-layer/payments/stripe.ts', content: stripeContent },
     { relativePath: 'prodify-layer/routes/api/checkout/route.ts', content: checkoutRoute },
     { relativePath: 'prodify-layer/routes/api/webhooks/stripe/route.ts', content: webhookRoute },
-    { relativePath: 'prodify-layer/routes/api/portal/route.ts', content: portalRoute },
+    { relativePath: 'prodify-layer/routes/api/billing/portal/route.ts', content: portalRoute },
   ];
 }

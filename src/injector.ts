@@ -7,6 +7,9 @@ import { buildAuthFiles } from './injectors/auth';
 import { buildPaymentsFiles } from './injectors/payments';
 import { buildDbFiles } from './injectors/db';
 import { buildEnvFile } from './injectors/env';
+import { buildEmailFiles } from './injectors/email';
+import { buildCiFiles } from './injectors/ci';
+import { buildComplianceFiles } from './injectors/compliance';
 import { buildReadmeFile } from './injectors/readme';
 import { dryRun as logDryRun, verbose, success, error as logError } from './logger';
 import type { FileEntry, InjectionResult, ProdifyConfig } from './types';
@@ -17,10 +20,28 @@ export async function runInjection(config: ProdifyConfig): Promise<InjectionResu
 
   // ── Collect all files from every injector ────────────────────────────────────
   const allFiles: FileEntry[] = [
-    ...buildAuthFiles(answers.userType),
-    ...buildPaymentsFiles(answers.pricingModel),
-    ...buildDbFiles(answers.userType),
+    // Auth — composition from selected authMethods array
+    ...buildAuthFiles(answers.authMethods, answers.userType),
+
+    // Payments — all 6 pricing models + trial/annual support
+    ...buildPaymentsFiles(answers.pricingModel, answers.billingInterval, answers.onboardingFlow),
+
+    // Database — schema conditional on userType, pricingModel, onboardingFlow
+    ...buildDbFiles(answers.userType, answers.pricingModel, answers.onboardingFlow),
+
+    // Environment variables — conditional on all answers
     ...buildEnvFile(answers),
+
+    // Transactional email — Resend client + 3 React Email templates
+    ...buildEmailFiles(answers),
+
+    // CI/CD — GitHub Actions workflow for the chosen deploy target
+    ...buildCiFiles(answers.deployTarget),
+
+    // Compliance — cookie banner / privacy policy / CCPA / terms
+    ...buildComplianceFiles(answers),
+
+    // README — activation checklist for the full injected layer
     ...buildReadmeFile(answers),
   ];
 

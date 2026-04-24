@@ -101,9 +101,25 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [analyzing, setAnalyzing] = useState(false);
 
   // Injection config
-  const [pricingModel, setPricingModel] = useState<'per-seat' | 'flat' | 'usage'>('flat');
+  // ── Injection config — all ProdifyAnswers fields ─────────────────────────────
+  const [pricingModel, setPricingModel] = useState<'flat' | 'per-seat' | 'usage' | 'hybrid' | 'one-time' | 'credits'>('flat');
+  const [billingInterval, setBillingInterval] = useState<'monthly' | 'annual'>('monthly');
+  const [onboardingFlow, setOnboardingFlow] = useState<'pay-upfront' | 'trial-card' | 'trial-no-card' | 'freemium'>('pay-upfront');
+  const [trialDays, setTrialDays] = useState(14);
   const [userType, setUserType] = useState<'individuals' | 'teams' | 'enterprise'>('individuals');
+  const [authMethods, setAuthMethods] = useState<string[]>(['google', 'github']);
+  const [deployTarget, setDeployTarget] = useState<'vercel' | 'railway' | 'fly' | 'aws' | 'none'>('vercel');
+  const [complianceRegion, setComplianceRegion] = useState<'global' | 'eu-gdpr' | 'us'>('global');
   const [openPR, setOpenPR] = useState(true);
+
+  const showBillingInterval = pricingModel !== 'one-time' && pricingModel !== 'credits';
+  const showTrial = onboardingFlow === 'trial-card' || onboardingFlow === 'trial-no-card';
+
+  function toggleAuthMethod(method: string) {
+    setAuthMethods(prev =>
+      prev.includes(method) ? prev.filter(m => m !== method) : [...prev, method],
+    );
+  }
 
   // Injection state
   const [injecting, setInjecting] = useState(false);
@@ -175,7 +191,18 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     const res = await fetch(`/api/projects/${id}/inject`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pricingModel, userType, openPR }),
+      body: JSON.stringify({
+        pricingModel,
+        billingInterval: showBillingInterval ? billingInterval : 'monthly',
+        onboardingFlow,
+        trialDays: showTrial ? trialDays : undefined,
+        userType,
+        authMethods,
+        emailProvider: 'resend',
+        deployTarget,
+        complianceRegion,
+        openPR,
+      }),
     });
 
     if (!res.ok || !res.body) {
@@ -755,28 +782,154 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
           {/* Config form */}
           <div className="p-6" style={{ background: 'rgba(27,30,61,0.5)', backdropFilter: 'blur(20px)', border: '1px solid #1a1b2e', borderRadius: '1rem' }}>
-            <h3 className="font-semibold mb-4" style={{ color: '#e3f4f8' }}>Configure injection</h3>
-            <div className="space-y-5">
+            <h3 className="font-semibold mb-1" style={{ color: '#e3f4f8' }}>Configure injection</h3>
+            {/* Trust badge */}
+            <p className="text-xs mb-5" style={{ color: '#8589b2', borderBottom: '1px solid #1a1b2e', paddingBottom: '12px' }}>
+              🔒 We inject code. Your Stripe handles payments. We never see your keys or customer data.
+            </p>
+            <div className="space-y-6">
+
+              {/* Pricing model — 6 options */}
               <OptionGroup
-                label="Pricing model"
+                label="How do you charge?"
                 options={[
-                  { value: 'flat', label: 'Flat rate', desc: 'Single subscription price' },
-                  { value: 'per-seat', label: 'Per seat', desc: 'Charge per user/seat' },
-                  { value: 'usage', label: 'Usage-based', desc: 'Metered billing' },
+                  { value: 'flat',       label: 'Flat subscription',   desc: 'One price / month or year' },
+                  { value: 'per-seat',   label: 'Per seat',            desc: 'Charge per user / team member' },
+                  { value: 'usage',      label: 'Usage-based',         desc: 'Metered — charge per API call or event' },
+                  { value: 'hybrid',     label: 'Flat + overages',     desc: 'Base subscription + usage charges (e.g. Vercel)' },
+                  { value: 'one-time',   label: 'One-time payment',    desc: 'Lifetime deal, template, or course' },
+                  { value: 'credits',    label: 'Credits / token pool', desc: 'Users buy credits upfront, spend on AI calls' },
                 ]}
                 value={pricingModel}
                 onChange={v => setPricingModel(v as typeof pricingModel)}
               />
+
+              {/* Billing interval (hidden for one-time and credits) */}
+              {showBillingInterval && (
+                <OptionGroup
+                  label="Billing interval"
+                  options={[
+                    { value: 'monthly', label: 'Monthly only', desc: 'Single Stripe price ID' },
+                    { value: 'annual',  label: 'Monthly + Annual', desc: 'Two price IDs — annual typically 15–20% off' },
+                  ]}
+                  value={billingInterval}
+                  onChange={v => setBillingInterval(v as typeof billingInterval)}
+                />
+              )}
+
+              {/* Onboarding flow */}
               <OptionGroup
-                label="User type"
+                label="How do users start?"
                 options={[
-                  { value: 'individuals', label: 'Individuals', desc: 'Single-user accounts' },
-                  { value: 'teams', label: 'Teams', desc: 'Orgs + memberships' },
-                  { value: 'enterprise', label: 'Enterprise', desc: 'Teams + SAML SSO' },
+                  { value: 'pay-upfront',   label: 'Pay upfront',         desc: 'Must pay before getting access' },
+                  { value: 'trial-card',    label: 'Free trial (card)',    desc: 'N days free, card required' },
+                  { value: 'trial-no-card', label: 'Free trial (no card)', desc: 'N days free, no card — higher signups' },
+                  { value: 'freemium',      label: 'Freemium',            desc: 'Always free up to a limit, pay to unlock more' },
+                ]}
+                value={onboardingFlow}
+                onChange={v => setOnboardingFlow(v as typeof onboardingFlow)}
+              />
+
+              {/* Trial days (conditional) */}
+              {showTrial && (
+                <div>
+                  <p className="text-sm font-medium mb-2" style={{ color: '#e3f4f8' }}>Trial length (days)</p>
+                  <input
+                    type="number"
+                    min={1}
+                    max={90}
+                    value={trialDays}
+                    onChange={e => setTrialDays(Number(e.target.value))}
+                    className="w-24 px-3 py-2 rounded-lg text-sm"
+                    style={{ background: 'rgba(27,30,61,0.8)', border: '1px solid #323779', color: '#e3f4f8' }}
+                  />
+                  <p className="text-xs mt-1" style={{ color: '#8589b2' }}>Injected as STRIPE_FREE_TRIAL_DAYS env key</p>
+                </div>
+              )}
+
+              {/* User type */}
+              <OptionGroup
+                label="Who are your users?"
+                options={[
+                  { value: 'individuals', label: 'Single users',       desc: 'One account per person, no teams' },
+                  { value: 'teams',       label: 'Companies / teams',  desc: 'Multiple people share one account' },
+                  { value: 'enterprise',  label: 'Enterprise (SSO)',   desc: 'SAML/SSO, admin controls, audit logs' },
                 ]}
                 value={userType}
                 onChange={v => setUserType(v as typeof userType)}
               />
+
+              {/* Auth methods — multi-select checkboxes */}
+              <div>
+                <p className="text-sm font-medium mb-2" style={{ color: '#e3f4f8' }}>Login methods</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { value: 'google',     label: 'Google OAuth',      desc: 'Best for consumer apps' },
+                    { value: 'github',     label: 'GitHub OAuth',      desc: 'Best for developer tools' },
+                    { value: 'magic-link', label: 'Magic link',        desc: 'Passwordless — higher conversion' },
+                    { value: 'email-pass', label: 'Email + password',  desc: 'Classic credentials' },
+                    ...(userType === 'enterprise'
+                      ? [{ value: 'saml', label: 'SAML / SSO', desc: 'Okta, Azure AD, Google Workspace' }]
+                      : []),
+                  ] as { value: string; label: string; desc: string }[]).map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => toggleAuthMethod(opt.value)}
+                      className="rounded-xl p-3 text-left transition-all"
+                      style={
+                        authMethods.includes(opt.value)
+                          ? { border: '1px solid #575efe', background: 'rgba(87,94,254,0.1)' }
+                          : { border: '1px solid #323779', background: 'transparent' }
+                      }
+                    >
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0"
+                          style={{
+                            border: authMethods.includes(opt.value) ? '1px solid #575efe' : '1px solid #8589b2',
+                            background: authMethods.includes(opt.value) ? '#575efe' : 'transparent',
+                          }}
+                        >
+                          {authMethods.includes(opt.value) && <span style={{ color: '#fff', fontSize: '10px' }}>✓</span>}
+                        </div>
+                        <p className="text-sm font-medium" style={{ color: '#e3f4f8' }}>{opt.label}</p>
+                      </div>
+                      <p className="text-xs mt-1 ml-6" style={{ color: '#8589b2' }}>{opt.desc}</p>
+                    </button>
+                  ))}
+                </div>
+                {authMethods.length === 0 && (
+                  <p className="text-xs mt-2" style={{ color: '#ef4444' }}>Select at least one login method</p>
+                )}
+              </div>
+
+              {/* Deploy target */}
+              <OptionGroup
+                label="Where will you deploy?"
+                options={[
+                  { value: 'vercel',   label: 'Vercel',         desc: 'Next.js native — preview deploys per PR' },
+                  { value: 'railway',  label: 'Railway',        desc: 'Docker-based, Postgres included' },
+                  { value: 'fly',      label: 'Fly.io',         desc: 'Global edge, persistent VMs' },
+                  { value: 'aws',      label: 'AWS Lightsail',  desc: 'AWS container deployment' },
+                  { value: 'none',     label: 'None / other',   desc: 'Inject a build-only CI check' },
+                ]}
+                value={deployTarget}
+                onChange={v => setDeployTarget(v as typeof deployTarget)}
+              />
+
+              {/* Compliance region */}
+              <OptionGroup
+                label="Where are your users?"
+                options={[
+                  { value: 'global',   label: 'Global',           desc: 'Basic Terms of Service only' },
+                  { value: 'eu-gdpr',  label: 'EU / GDPR',        desc: 'Cookie consent banner + Privacy policy' },
+                  { value: 'us',       label: 'US / CCPA',        desc: 'CCPA notice template' },
+                ]}
+                value={complianceRegion}
+                onChange={v => setComplianceRegion(v as typeof complianceRegion)}
+              />
+
+              {/* PR option */}
               <div>
                 <p className="text-sm font-medium mb-2" style={{ color: '#e3f4f8' }}>After injection</p>
                 <div className="flex gap-3">
@@ -800,6 +953,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                   ))}
                 </div>
               </div>
+
             </div>
 
             <div className="mt-6 pt-4 flex items-center justify-between" style={{ borderTop: '1px solid #1a1b2e' }}>
@@ -808,7 +962,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               </p>
               <button
                 onClick={() => void startInjection()}
-                disabled={report.conflicts.some(c => c.severity === 'blocker')}
+                disabled={report.conflicts.some(c => c.severity === 'blocker') || authMethods.length === 0}
                 className="py-2.5 px-6 rounded-full font-semibold text-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ background: '#575efe', color: '#ffffff', boxShadow: '0 0 20px rgba(87,94,254,0.4)' }}
                 onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 32px rgba(87,94,254,0.6)'; }}

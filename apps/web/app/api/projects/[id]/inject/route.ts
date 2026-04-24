@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { insforge } from '@/lib/insforge';
+import { logActivity } from '@/lib/activity';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
@@ -51,6 +52,7 @@ export async function POST(
 
       try {
         await insforge.database.from('projects').update({ status: 'injecting' }).eq('id', id);
+        await logActivity({ userId: session.user.id, projectId: id, projectName: project.name as string, type: 'injection_started', message: `Started injecting infrastructure into ${project.repoFullName ?? project.name}`, metadata: { pricingModel: body.pricingModel, userType: body.userType } });
 
         // Step 1: Clone
         send(controller, 'progress', { step: 1, total: 6, message: 'Cloning repository...' });
@@ -166,10 +168,12 @@ jobs:
           })
           .eq('id', id);
 
+        await logActivity({ userId: session.user.id, projectId: id, projectName: project.name as string, type: prUrl ? 'pr_opened' : 'injection_completed', message: prUrl ? `PR opened for ${project.repoFullName ?? project.name}` : `Branch ${branchName} pushed to GitHub`, metadata: { prUrl, branchName } });
         send(controller, 'done', { prUrl, branchName });
       } catch (err) {
         console.error('[inject] error:', err);
         await insforge.database.from('projects').update({ status: 'error' }).eq('id', id);
+        await logActivity({ userId: session.user.id, projectId: id, projectName: project.name as string, type: 'injection_failed', message: `Injection failed: ${err instanceof Error ? err.message : 'Unknown error'}` });
         send(controller, 'error', { message: err instanceof Error ? err.message : 'Injection failed' });
       } finally {
         try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }

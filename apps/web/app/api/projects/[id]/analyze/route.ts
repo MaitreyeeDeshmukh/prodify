@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { insforge } from '@/lib/insforge';
+import { logActivity } from '@/lib/activity';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
@@ -47,11 +48,8 @@ export async function POST(
       const tmpDir = path.join(os.tmpdir(), `prodify-${id}-${Date.now()}`);
 
       try {
-        // Update status to analyzing
-        await insforge.database
-          .from('projects')
-          .update({ status: 'analyzing' })
-          .eq('id', id);
+        await insforge.database.from('projects').update({ status: 'analyzing' }).eq('id', id);
+        await logActivity({ userId: session.user.id, projectId: id, projectName: project.name as string, type: 'analysis_started', message: `Started analyzing ${project.repoFullName ?? project.name}` });
 
         send(controller, 'progress', { step: 1, total: 4, message: 'Cloning repository...' });
 
@@ -72,18 +70,14 @@ export async function POST(
 
         send(controller, 'progress', { step: 4, total: 4, message: 'Saving results...' });
 
-        await insforge.database
-          .from('projects')
-          .update({ status: 'analyzed', analysisResult: report })
-          .eq('id', id);
+        await insforge.database.from('projects').update({ status: 'analyzed', analysisResult: report }).eq('id', id);
+        await logActivity({ userId: session.user.id, projectId: id, projectName: project.name as string, type: 'analysis_completed', message: `Analysis complete — ${report.detectedStack.framework}, ${report.injectionOpportunities.filter(o => o.canInject).length} layers ready to inject`, metadata: { pattern: report.pattern } });
 
         send(controller, 'done', { report });
       } catch (err) {
         console.error('[analyze] error:', err);
-        await insforge.database
-          .from('projects')
-          .update({ status: 'error' })
-          .eq('id', id);
+        await insforge.database.from('projects').update({ status: 'error' }).eq('id', id);
+        await logActivity({ userId: session.user.id, projectId: id, projectName: project.name as string, type: 'analysis_failed', message: `Analysis failed: ${err instanceof Error ? err.message : 'Unknown error'}` });
         send(controller, 'error', { message: err instanceof Error ? err.message : 'Analysis failed' });
       } finally {
         // Clean up temp dir

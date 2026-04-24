@@ -10,7 +10,7 @@ const bedrock = new BedrockRuntimeClient({
   } : undefined,
 });
 
-const MODEL_ID = process.env.AWS_BEDROCK_MODEL_ID || 'us.anthropic.claude-3-5-haiku-20241022-v1:0';
+const MODEL_ID = process.env.AWS_BEDROCK_MODEL_ID || 'us.anthropic.claude-sonnet-4-5-20250929-v1:0';
 
 export interface InjectionOpportunity {
   layer: 'auth' | 'payments' | 'database' | 'ci' | 'env';
@@ -84,9 +84,16 @@ export async function analyzeRepository(targetDir: string): Promise<AnalysisRepo
     readFileSafe(path.join(targetDir, 'tsconfig.json'), 300),
   ]);
 
-  const prompt = `You are an expert Next.js developer analyzing a GitHub repository to inject production-ready SaaS infrastructure (auth, payments, database).
+  const prompt = `You are a senior engineer performing a precise technical audit of a GitHub repository. Your job is to detect what infrastructure already EXISTS in the codebase and what is MISSING.
 
-Analyze this project thoroughly and return a detailed JSON report.
+CRITICAL RULES:
+- Only mark something as present (hasAuth, hasPayments, hasDatabase) if you find CONCRETE EVIDENCE in the files below
+- Evidence for payments: stripe, lemon-squeezy, paddle, chargebee in package.json dependencies OR files named checkout/billing/webhook/subscription
+- Evidence for auth: next-auth, clerk, auth0, supabase auth, firebase auth in package.json OR files named [...nextauth], auth.ts, middleware.ts with auth logic
+- Evidence for database: prisma, drizzle, supabase, mongoose, pg, mysql2 in package.json OR schema files, migration files
+- Evidence for CI: .github/workflows/ directory in the file tree
+- If you don't see it in the data below, it does NOT exist — do not infer or assume
+- The summary must be factual and specific, not marketing language
 
 === package.json ===
 ${packageJson}
@@ -103,7 +110,7 @@ ${nextConfig}
 === tsconfig ===
 ${tsConfig}
 
-Return ONLY valid JSON matching this exact TypeScript interface (no markdown, no explanation):
+Return ONLY valid JSON matching this exact TypeScript interface (no markdown, no explanation, no code fences):
 
 {
   "detectedStack": {
@@ -122,20 +129,20 @@ Return ONLY valid JSON matching this exact TypeScript interface (no markdown, no
     {
       "layer": "auth" | "payments" | "database" | "ci" | "env",
       "canInject": boolean,
-      "currentState": "short description of current state",
-      "proposed": "short description of what Prodify will inject",
+      "currentState": "exact description of what exists or 'None detected'",
+      "proposed": "exactly what Prodify will inject",
       "filesToCreate": ["list", "of", "file", "paths"],
       "effort": "low" | "medium" | "high"
     }
   ],
   "conflicts": [
     {
-      "description": "what conflicts",
+      "description": "specific conflict based on evidence found",
       "severity": "warning" | "blocker",
-      "resolution": "how to resolve"
+      "resolution": "concrete resolution step"
     }
   ],
-  "summary": "2-3 sentence human-readable summary of the project and what Prodify will do"
+  "summary": "2-3 sentences: what the app does, what infrastructure exists, what is missing. Be factual and specific."
 }`;
 
   const payload = {

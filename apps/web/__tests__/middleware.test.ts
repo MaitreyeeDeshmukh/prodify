@@ -1,4 +1,4 @@
-import { config } from '../middleware';
+import { config } from '../proxy';
 
 describe('middleware config', () => {
   it('matches dashboard routes', () => {

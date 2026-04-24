@@ -1,7 +1,7 @@
 // ─── ENV Injector ─────────────────────────────────────────────────────────────
 // Generates a .env.example with all required keys, labeled by service.
 // Keys are conditional on pricing model, billing interval, and onboarding flow.
-import type { FileEntry, ProdifyAnswers } from '../types';
+import type { FileEntry, ProdifyAnswers, DbProvider } from '../types';
 
 export function buildEnvFile(answers: ProdifyAnswers): FileEntry[] {
   const {
@@ -12,6 +12,7 @@ export function buildEnvFile(answers: ProdifyAnswers): FileEntry[] {
     userType,
     deployTarget,
     complianceRegion,
+    dbProvider = 'insforge',
   } = answers;
 
   // ── Stripe price ID block ──────────────────────────────────────────────────
@@ -104,12 +105,12 @@ NEXT_PUBLIC_COOKIE_CONSENT_ENABLED=true`
 APP_NAME="${appName}"
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 
-# ── InsForge (BaaS) ───────────────────────────────────────────────────────────
+${dbProvider === 'supabase' ? `# ── Supabase (BaaS) ───────────────────────────────────────────────────────────
+NEXT_PUBLIC_SUPABASE_URL=              # supabase.com → project → Settings → API → URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY=         # same page → anon key (safe for browser)
+SUPABASE_SERVICE_ROLE_KEY=             # same page → service_role key (server-only!)` : `# ── InsForge (BaaS) ───────────────────────────────────────────────────────────
 INSFORGE_URL=                          # Your InsForge project URL
-INSFORGE_ANON_KEY=                     # Your InsForge anon key
-
-# ── Database ──────────────────────────────────────────────────────────────────
-DATABASE_URL=postgresql://user:password@localhost:5432/mydb
+INSFORGE_ANON_KEY=                     # Your InsForge anon key`}
 
 # ── NextAuth.js ───────────────────────────────────────────────────────────────
 NEXTAUTH_URL=http://localhost:3000

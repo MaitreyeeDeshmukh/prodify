@@ -48,7 +48,19 @@ export type DeployTarget = 'vercel' | 'railway' | 'fly' | 'aws' | 'none';
 /** Compliance / data handling region */
 export type ComplianceRegion = 'global' | 'eu-gdpr' | 'us';
 
+/** Database / BaaS provider */
+export type DbProvider = 'insforge' | 'supabase';
+
+/** UI component style */
+export type UILibrary = 'shadcn' | 'plain';
+
+/** Whether the user chose guided-auto or step-by-step-manual setup */
+export type SetupMode = 'auto' | 'manual';
+
 export interface ProdifyAnswers {
+  // ── Setup mode ──────────────────────────────────────────────────────────────
+  setupMode: SetupMode;
+
   // ── Identity ───────────────────────────────────────────────────────────────
   appName: string;
 
@@ -57,7 +69,7 @@ export interface ProdifyAnswers {
   billingInterval: BillingInterval;    // ignored for 'one-time' and 'credits'
   onboardingFlow: OnboardingFlow;
   trialDays?: number;                  // set when onboardingFlow is trial-*
-  freeLimit?: string;                  // set when onboardingFlow is freemium (e.g. "5 projects/month")
+  freeLimit?: string;                  // set when onboardingFlow is freemium
 
   // ── Users & auth ───────────────────────────────────────────────────────────
   userType: UserType;
@@ -67,6 +79,13 @@ export interface ProdifyAnswers {
   emailProvider: EmailProvider;
   deployTarget: DeployTarget;
   complianceRegion: ComplianceRegion;
+
+  // ── Database / BaaS ────────────────────────────────────────────────────────
+  dbProvider: DbProvider;
+
+  // ── UI components ──────────────────────────────────────────────────────────
+  injectUi: boolean;
+  uiLibrary?: UILibrary;
 
   // ── Stack ──────────────────────────────────────────────────────────────────
   stack: StackType;

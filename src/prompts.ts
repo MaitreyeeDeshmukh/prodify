@@ -1,6 +1,7 @@
 // ─── Interactive Prompts ──────────────────────────────────────────────────────
 // Runs the full Inquirer flow and returns a typed ProdifyAnswers object.
 // Questions are grouped into logical sections with progressive disclosure.
+// New in v2: starts with Auto vs Manual mode select.
 import inquirer from 'inquirer';
 import type {
   DetectedStack,
@@ -12,10 +13,36 @@ import type {
   AuthMethod,
   DeployTarget,
   ComplianceRegion,
+  DbProvider,
+  UILibrary,
+  SetupMode,
 } from './types';
 
-export async function runPrompts(detected: DetectedStack): Promise<ProdifyAnswers> {
+export async function runPrompts(
+  detected: DetectedStack,
+  prefilled?: Partial<ProdifyAnswers>,
+): Promise<ProdifyAnswers> {
   const stackIsKnown = detected.type !== 'unknown';
+
+  // ── Section 0: Setup mode ────────────────────────────────────────────────────
+  const { setupMode } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'setupMode',
+      message: 'How do you want to set up?',
+      default: prefilled?.setupMode ?? 'manual',
+      choices: [
+        {
+          name: '🤖 Automatic  — Prodify analyses your repo and picks the best config. You review once.',
+          value: 'auto',
+        },
+        {
+          name: '🎛  Manual     — Choose every option step by step (full control).',
+          value: 'manual',
+        },
+      ],
+    },
+  ]) as { setupMode: SetupMode };
 
   // ── Section 1: Identity ──────────────────────────────────────────────────────
   const { appName } = await inquirer.prompt([
@@ -23,7 +50,7 @@ export async function runPrompts(detected: DetectedStack): Promise<ProdifyAnswer
       type: 'input',
       name: 'appName',
       message: 'What is your app called?',
-      default: 'My SaaS App',
+      default: prefilled?.appName ?? 'My SaaS App',
       validate: (v: string) => v.trim().length > 0 || 'App name is required',
     },
   ]);
@@ -34,6 +61,7 @@ export async function runPrompts(detected: DetectedStack): Promise<ProdifyAnswer
       type: 'list',
       name: 'pricingModel',
       message: 'How do you charge customers?',
+      default: prefilled?.pricingModel ?? 'flat',
       choices: [
         {
           name: '(1) Monthly/annual subscription  — one flat price (e.g. $19/month)',
@@ -64,20 +92,21 @@ export async function runPrompts(detected: DetectedStack): Promise<ProdifyAnswer
   ]) as { pricingModel: PricingModel };
 
   // ── Section 3: Billing interval (skip for one-time / credits) ────────────────
-  let billingInterval: BillingInterval = 'monthly';
+  let billingInterval: BillingInterval = prefilled?.billingInterval ?? 'monthly';
   if (pricingModel !== 'one-time' && pricingModel !== 'credits') {
     const ans = await inquirer.prompt([
       {
         type: 'list',
         name: 'billingInterval',
         message: 'Will you offer annual billing?',
+        default: prefilled?.billingInterval ?? 'monthly',
         choices: [
           {
             name: '(1) Monthly only  — single price ID, no annual option',
             value: 'monthly',
           },
           {
-            name: '(2) Monthly + Annual  — two price IDs (you create both in Stripe dashboard); annual typically discounted 15–20%',
+            name: '(2) Monthly + Annual  — two price IDs; annual typically 15–20% discounted',
             value: 'annual',
           },
         ],
@@ -92,6 +121,7 @@ export async function runPrompts(detected: DetectedStack): Promise<ProdifyAnswer
       type: 'list',
       name: 'onboardingFlow',
       message: 'How do users start using your app?',
+      default: prefilled?.onboardingFlow ?? 'trial-no-card',
       choices: [
         {
           name: '(1) Pay upfront              — users must pay before getting access',
@@ -102,7 +132,7 @@ export async function runPrompts(detected: DetectedStack): Promise<ProdifyAnswer
           value: 'trial-card',
         },
         {
-          name: '(3) Free trial (no card)     — N-day free trial, no card required (higher signups, lower conversion)',
+          name: '(3) Free trial (no card)     — N-day free trial, no card required (higher signups)',
           value: 'trial-no-card',
         },
         {
@@ -114,14 +144,14 @@ export async function runPrompts(detected: DetectedStack): Promise<ProdifyAnswer
   ]) as { onboardingFlow: OnboardingFlow };
 
   // ── Section 5: Trial days (conditional) ─────────────────────────────────────
-  let trialDays: number | undefined;
+  let trialDays: number | undefined = prefilled?.trialDays;
   if (onboardingFlow === 'trial-card' || onboardingFlow === 'trial-no-card') {
     const ans = await inquirer.prompt([
       {
         type: 'number',
         name: 'trialDays',
         message: 'How many days is the free trial?',
-        default: 14,
+        default: prefilled?.trialDays ?? 14,
         validate: (v: number) => (v > 0 && v <= 365) || 'Enter a number between 1 and 365',
       },
     ]) as { trialDays: number };
@@ -129,25 +159,26 @@ export async function runPrompts(detected: DetectedStack): Promise<ProdifyAnswer
   }
 
   // ── Section 6: Free limit description (conditional) ─────────────────────────
-  let freeLimit: string | undefined;
+  let freeLimit: string | undefined = prefilled?.freeLimit;
   if (onboardingFlow === 'freemium') {
     const ans = await inquirer.prompt([
       {
         type: 'input',
         name: 'freeLimit',
         message: 'Describe the free tier limit (shown in UI and README):',
-        default: '3 projects, 100 API calls/month',
+        default: prefilled?.freeLimit ?? '3 projects, 100 API calls/month',
       },
     ]) as { freeLimit: string };
     freeLimit = ans.freeLimit;
   }
 
-  // ── Section 7: User type (plain-English labels, same values) ─────────────────
+  // ── Section 7: User type ──────────────────────────────────────────────────────
   const { userType } = await inquirer.prompt([
     {
       type: 'list',
       name: 'userType',
       message: 'Who are your users?',
+      default: prefilled?.userType ?? 'individuals',
       choices: [
         {
           name: '(1) Single users             — one account per person, no teams or orgs',
@@ -181,17 +212,38 @@ export async function runPrompts(detected: DetectedStack): Promise<ProdifyAnswer
       name: 'authMethods',
       message: 'Which login methods will you support? (Space to select, Enter to confirm)',
       choices: authChoices,
-      default: ['google', 'github'],
+      default: prefilled?.authMethods ?? ['google', 'github'],
       validate: (v: string[]) => v.length > 0 || 'Select at least one auth method',
     },
   ]) as { authMethods: AuthMethod[] };
 
-  // ── Section 9: Deploy target ─────────────────────────────────────────────────
+  // ── Section 9: BaaS / Database provider ─────────────────────────────────────
+  const { dbProvider } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'dbProvider',
+      message: 'Which database/backend will you use?',
+      default: prefilled?.dbProvider ?? 'insforge',
+      choices: [
+        {
+          name: '(1) InsForge  — built-in BaaS (auth, DB, storage, AI) — recommended for new projects',
+          value: 'insforge',
+        },
+        {
+          name: '(2) Supabase  — open-source alternative, widely documented, self-hostable',
+          value: 'supabase',
+        },
+      ],
+    },
+  ]) as { dbProvider: DbProvider };
+
+  // ── Section 10: Deploy target ─────────────────────────────────────────────────
   const { deployTarget } = await inquirer.prompt([
     {
       type: 'list',
       name: 'deployTarget',
       message: 'Where will you deploy? (affects the injected GitHub Actions CI file)',
+      default: prefilled?.deployTarget ?? 'vercel',
       choices: [
         { name: '(1) Vercel    — Next.js native, preview deploys per PR', value: 'vercel' },
         { name: '(2) Railway   — Docker-based, Postgres included', value: 'railway' },
@@ -202,12 +254,13 @@ export async function runPrompts(detected: DetectedStack): Promise<ProdifyAnswer
     },
   ]) as { deployTarget: DeployTarget };
 
-  // ── Section 10: Compliance region ───────────────────────────────────────────
+  // ── Section 11: Compliance region ───────────────────────────────────────────
   const { complianceRegion } = await inquirer.prompt([
     {
       type: 'list',
       name: 'complianceRegion',
       message: 'Where are your users? (affects cookie banners and data handling)',
+      default: prefilled?.complianceRegion ?? 'global',
       choices: [
         { name: '(1) Global      — basic terms template only', value: 'global' },
         { name: '(2) EU / GDPR   — cookie consent banner + privacy policy template', value: 'eu-gdpr' },
@@ -216,7 +269,40 @@ export async function runPrompts(detected: DetectedStack): Promise<ProdifyAnswer
     },
   ]) as { complianceRegion: ComplianceRegion };
 
-  // ── Section 11: Stack confirmation ──────────────────────────────────────────
+  // ── Section 12: UI injection ─────────────────────────────────────────────────
+  const { injectUi } = await inquirer.prompt([
+    {
+      type: 'confirm',
+      name: 'injectUi',
+      message: 'Inject ready-to-use React UI components? (auth buttons, pricing page, billing portal)',
+      default: prefilled?.injectUi ?? true,
+    },
+  ]) as { injectUi: boolean };
+
+  let uiLibrary: UILibrary | undefined;
+  if (injectUi) {
+    const ans = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'uiLibrary',
+        message: 'Which component style?',
+        default: prefilled?.uiLibrary ?? 'plain',
+        choices: [
+          {
+            name: '(1) shadcn/ui  — Radix + Tailwind, fits most Next.js stacks',
+            value: 'shadcn',
+          },
+          {
+            name: '(2) Plain JSX  — zero extra dependencies, easy to restyle',
+            value: 'plain',
+          },
+        ],
+      },
+    ]) as { uiLibrary: UILibrary };
+    uiLibrary = ans.uiLibrary;
+  }
+
+  // ── Section 13: Stack confirmation ──────────────────────────────────────────
   let stack: StackType;
   if (!stackIsKnown) {
     const { manualStack } = await inquirer.prompt([
@@ -264,6 +350,7 @@ export async function runPrompts(detected: DetectedStack): Promise<ProdifyAnswer
   }
 
   return {
+    setupMode,
     appName,
     pricingModel,
     billingInterval,
@@ -272,9 +359,12 @@ export async function runPrompts(detected: DetectedStack): Promise<ProdifyAnswer
     freeLimit,
     userType,
     authMethods,
-    emailProvider: 'resend',     // Resend is always injected; removed as a question
+    emailProvider: 'resend',
     deployTarget,
     complianceRegion,
+    dbProvider,
+    injectUi,
+    uiLibrary,
     stack,
   };
 }

@@ -230,6 +230,131 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const report = project.analysisResult;
   const status = project.status;
 
+  function downloadReport(format: 'markdown' | 'json') {
+    if (!report || !project) return;
+
+    let content: string;
+    let filename: string;
+    let mime: string;
+
+    if (format === 'json') {
+      content = JSON.stringify(report, null, 2);
+      filename = `prodify-report-${project.name.replace(/\s+/g, '-').toLowerCase()}.json`;
+      mime = 'application/json';
+    } else {
+      const lines: string[] = [];
+      const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+      lines.push(`# Prodify Analysis Report — ${project.name}`);
+      lines.push(`Generated: ${date}`);
+      if (project.repoFullName) lines.push(`Repository: https://github.com/${project.repoFullName}`);
+      lines.push('');
+
+      if (report.appDescription) {
+        lines.push('## App Description');
+        lines.push(report.appDescription);
+        lines.push('');
+      }
+
+      lines.push('## Summary');
+      lines.push(report.summary);
+      lines.push('');
+
+      lines.push('## Detected Stack');
+      lines.push(`- **Framework:** ${report.detectedStack.framework}${report.detectedStack.frameworkVersion ? ` ${report.detectedStack.frameworkVersion}` : ''}`);
+      lines.push(`- **Language:** ${report.detectedStack.language}`);
+      if (report.detectedStack.nodeVersion) lines.push(`- **Node:** ${report.detectedStack.nodeVersion}`);
+      lines.push(`- **Auth:** ${report.detectedStack.hasAuth ? `${report.detectedStack.authProvider ?? 'yes'}${report.detectedStack.authDetails ? ` — ${report.detectedStack.authDetails}` : ''}` : 'None'}`);
+      lines.push(`- **Payments:** ${report.detectedStack.hasPayments ? `${report.detectedStack.paymentsProvider ?? 'yes'}${report.detectedStack.paymentsDetails ? ` — ${report.detectedStack.paymentsDetails}` : ''}` : 'None'}`);
+      lines.push(`- **Database:** ${report.detectedStack.hasDatabase ? `${report.detectedStack.dbProvider ?? 'yes'}${report.detectedStack.dbDetails ? ` — ${report.detectedStack.dbDetails}` : ''}` : 'None'}`);
+      lines.push(`- **CI:** ${report.detectedStack.hasCI ? report.detectedStack.ciDetails ?? 'yes' : 'None'}`);
+      if (report.detectedStack.otherDependencies?.length) {
+        lines.push(`- **Other deps:** ${report.detectedStack.otherDependencies.join(', ')}`);
+      }
+      lines.push('');
+
+      if (report.monetizationReadiness) {
+        lines.push(`## Monetization Readiness: ${report.monetizationReadiness.score}/100`);
+        if (report.monetizationReadiness.blockers.length) {
+          lines.push('');
+          lines.push('### Blockers');
+          report.monetizationReadiness.blockers.forEach(b => lines.push(`- ${b}`));
+        }
+        if (report.monetizationReadiness.quickWins.length) {
+          lines.push('');
+          lines.push('### Quick wins');
+          report.monetizationReadiness.quickWins.forEach(w => lines.push(`- ${w}`));
+        }
+        lines.push('');
+      }
+
+      if (report.codeInsights?.length) {
+        lines.push('## Code Findings');
+        report.codeInsights.forEach(insight => {
+          lines.push('');
+          lines.push(`### ${insight.category.charAt(0).toUpperCase() + insight.category.slice(1)}: ${insight.finding}`);
+          lines.push(`**Evidence:** \`${insight.evidence}\``);
+          lines.push(`**Recommendation:** ${insight.recommendation}`);
+        });
+        lines.push('');
+      }
+
+      if (report.apiRoutes?.length) {
+        lines.push('## API Routes Found');
+        report.apiRoutes.forEach(r => lines.push(`- \`${r}\``));
+        lines.push('');
+      }
+
+      if (report.conflicts.length) {
+        lines.push('## Conflicts');
+        report.conflicts.forEach(c => {
+          lines.push('');
+          lines.push(`### ${c.severity === 'blocker' ? '🚫' : '⚠️'} ${c.description}`);
+          lines.push(`**Severity:** ${c.severity}`);
+          lines.push(`**Resolution:** ${c.resolution}`);
+          if (c.affectedFiles?.length) lines.push(`**Affected files:** ${c.affectedFiles.map(f => `\`${f}\``).join(', ')}`);
+        });
+        lines.push('');
+      }
+
+      lines.push('## Injection Opportunities');
+      report.injectionOpportunities.forEach(opp => {
+        lines.push('');
+        lines.push(`### ${opp.layer.charAt(0).toUpperCase() + opp.layer.slice(1)} (${opp.effort} effort)`);
+        lines.push(`**Current:** ${opp.currentState}`);
+        lines.push(`**After injection:** ${opp.proposed}`);
+        if (opp.gaps?.length) {
+          lines.push('**Gaps:**');
+          opp.gaps.forEach(g => lines.push(`- ${g}`));
+        }
+        if (opp.implementation) {
+          lines.push(`**Implementation:** ${opp.implementation}`);
+        }
+        if (opp.filesToCreate.length) {
+          lines.push(`**Files to create:** ${opp.filesToCreate.map(f => `\`${f}\``).join(', ')}`);
+        }
+        if (opp.envVarsNeeded?.length) {
+          lines.push(`**Env vars needed:** ${opp.envVarsNeeded.map(v => `\`${v}\``).join(', ')}`);
+        }
+      });
+      lines.push('');
+      lines.push('---');
+      lines.push('*Generated by [Prodify](https://prodify.dev)*');
+
+      content = lines.join('\n');
+      filename = `prodify-report-${project.name.replace(/\s+/g, '-').toLowerCase()}.md`;
+      mime = 'text/markdown';
+    }
+
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   // Shared report JSX — rendered in both 'analyzed' and 'injected' (report tab) states
   const reportContent = report ? (
     <div className="space-y-6">
@@ -237,7 +362,32 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       <div className="bg-white rounded-2xl border border-gray-100 p-6">
         <div className="flex items-start justify-between gap-4 mb-4">
           <div className="flex-1">
-            <h2 className="font-semibold text-gray-900 mb-1">Analysis report</h2>
+            <div className="flex items-center gap-3 mb-1">
+              <h2 className="font-semibold text-gray-900">Analysis report</h2>
+              {/* Download buttons */}
+              <div className="flex items-center gap-1 ml-auto">
+                <button
+                  onClick={() => downloadReport('markdown')}
+                  title="Download as Markdown"
+                  className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-lg transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  .md
+                </button>
+                <button
+                  onClick={() => downloadReport('json')}
+                  title="Download as JSON"
+                  className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-lg transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  .json
+                </button>
+              </div>
+            </div>
             {report.appDescription && (
               <p className="text-sm text-gray-500 mb-3 italic">{report.appDescription}</p>
             )}
